@@ -76,9 +76,22 @@ lib/
   googleAds.ts         # integración server-side con Google Ads API
 ```
 
+## Decisión de arquitectura de datos (2026-09-09)
+
+Se evaluó y **descartó** usar Segment/BigQuery para esto (son herramientas para otros problemas — ver detalle en `SDD-TAQUION/specs/003-dashboard-consumos.md`). El plan confirmado:
+
+1. **Ingesta:** Windsor.ai (API REST, no MCP) — MVP con **Google Ads + TikTok Ads** (Meta Ads tiene el token roto, LinkedIn/GA pendientes de upgrade de plan — ver spec 003).
+2. **Almacenamiento:** Supabase (Postgres), plan Free — todavía no creado.
+3. **Multiusuario:** Supabase Auth + Row Level Security, cuando llegue la fase de usuarios cliente — **no es la prioridad actual**, el panel interno de Ignite va primero.
+
+`WINDSOR_API_KEY` ya está cargada en las env vars de Vercel. `lib/googleAds.ts` va a reemplazarse por una integración a Windsor.ai una vez que Google Ads quede conectado ahí.
+
 ## Qué falta (backlog conocido, no implementado todavía)
 
-- Meta Ads y LinkedIn Ads reales (vía Windsor.ai u otra integración) — hoy siguen mock incluso cuando Google Ads esté conectado.
+- Terminar de conectar Google Ads en Windsor.ai (login de Google pendiente del lado del usuario) y confirmar salud de TikTok Ads.
+- Reemplazar `lib/googleAds.ts` (integración directa a Google Ads API) por una integración a la API REST de Windsor.ai.
+- Crear proyecto Supabase (Free) y migrar el almacenamiento de "mock + intento en vivo" a "leer de Supabase" (Windsor.ai alimentaría Supabase, no se consultaría en cada request).
+- Mapeo real cliente↔cuenta: las cuentas conectadas en Windsor.ai hoy son cuentas **propias de Taquión** (`Taquion`, `Taquion-AdAccountTTK`, `Taquion0126`), no los 4 clientes ficticios del mock (Norte Fintech, Andes Turismo, Terra Realty, MetroVoz) — falta decidir el mapeo real.
 - Persistencia/histórico real por día (hoy el "acumulado por día" se estima con un patrón semanal genérico, no son datos diarios reales de la plataforma).
-- Autenticación de acceso al dashboard (hoy no tiene login — evaluar si corresponde antes de exponerlo públicamente en Vercel, dado que muestra presupuestos y eficiencia de clientes reales).
+- Autenticación de acceso al dashboard (Supabase Auth, fase 2 — no bloquea el trabajo actual, pero recordar que hoy no tiene login y muestra presupuestos/eficiencia reales una vez conectado).
 - Tests automatizados — no hay ninguno todavía.
