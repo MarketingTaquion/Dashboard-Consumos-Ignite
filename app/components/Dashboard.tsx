@@ -334,7 +334,7 @@ export default function Dashboard() {
       <div className={"mock-note" + (data.source === "google-ads" ? " real" : "")}>
         {data.source === "mock" ? (
           <>
-            🔥{" "}
+            <span className="tq-arrow">↘</span>{" "}
             <span>
               <b>Datos de ejemplo.</b> MVP real en curso: Google Ads + TikTok Ads vía Windsor.ai (ver{" "}
               <code>specs/003-dashboard-consumos.md</code>). Meta Ads tiene el token de Windsor.ai roto y LinkedIn
@@ -343,7 +343,7 @@ export default function Dashboard() {
           </>
         ) : (
           <>
-            ✅{" "}
+            <span className="tq-arrow" style={{ color: "var(--status-good)" }}>↘</span>{" "}
             <span>
               <b>Google Ads conectado.</b> El resto de las plataformas (Meta, LinkedIn) sigue en mock hasta que se
               integren.
@@ -353,14 +353,18 @@ export default function Dashboard() {
       </div>
       {data.warnings?.map((w, i) => (
         <div className="mock-note" key={i}>
-          ⚠️ <span>{w}</span>
+          <span className="tq-arrow" style={{ color: "var(--status-warning)" }}>↘</span> <span>{w}</span>
         </div>
       ))}
 
       <header className="top">
-        <div>
-          <h1>Pulso Ignite</h1>
-          <div className="sub">Consumo de pauta multi-cliente — equipo Ignite, Taquión</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/taquion-isotipo.png" alt="Taquión" className="brand-mark" width={30} height={30} />
+          <div>
+            <h1>Pulso Ignite</h1>
+            <div className="sub">Consumo de pauta multi-cliente — equipo Ignite, Taquión</div>
+          </div>
         </div>
         <div className="num" style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
           Día <b style={{ color: "var(--text-primary)" }}>{today}</b> de {daysInMonth} · ritmo ideal{" "}
@@ -372,7 +376,7 @@ export default function Dashboard() {
         <div className="controls-left">
           <div className="dropdown-wrap" ref={dateMenuRef}>
             <button className="chip" aria-expanded={dateMenuOpen} onClick={() => setDateMenuOpen((v) => !v)}>
-              📅 {dateRangeLabel()} <span style={{ fontSize: 10 }}>▾</span>
+              {dateRangeLabel()} <span style={{ fontSize: 10 }}>▾</span>
             </button>
             {dateMenuOpen && (
               <div className="date-menu" role="menu">
