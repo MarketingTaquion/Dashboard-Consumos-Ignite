@@ -7,6 +7,7 @@ const PLATFORMS: { key: PlatformKey; label: string; varName: string }[] = [
   { key: "meta", label: "Meta Ads", varName: "--plat-meta" },
   { key: "google", label: "Google Ads", varName: "--plat-google" },
   { key: "linkedin", label: "LinkedIn Ads", varName: "--plat-linkedin" },
+  { key: "tiktok", label: "TikTok Ads", varName: "--plat-tiktok" },
 ];
 
 // Patrón semanal (lun..dom aproximado) que se repite cada 7 días para dar
@@ -122,6 +123,7 @@ export default function Dashboard() {
     meta: true,
     google: true,
     linkedin: true,
+    tiktok: true,
   });
   const [view, setView] = useState<"chart" | "table">("chart");
   const [chartOpen, setChartOpen] = useState(false);
@@ -274,6 +276,26 @@ export default function Dashboard() {
 
   const colCount = 7 + (compareOn ? 1 : 0);
 
+  // ---- totales agregados + gasto/presupuesto por plataforma (chips pedidos a mano) ----
+  let totalBudgetEnabled = 0;
+  let totalSpendEnabled = 0;
+  clientsIncluded.forEach((c) => {
+    const frac = enabledMixFrac(c, enabled);
+    totalBudgetEnabled += c.budget * frac;
+    totalSpendEnabled += c.spend8 * frac;
+  });
+
+  const platformTotals = PLATFORMS.map((p) => {
+    let spend = 0;
+    let budget = 0;
+    clientsIncluded.forEach((c) => {
+      const frac = (c.mix[p.key] || 0) / 100;
+      spend += c.spend8 * frac;
+      budget += c.budget * frac;
+    });
+    return { ...p, spend, budget };
+  });
+
   return (
     <div className="wrap">
       <div className={"mock-note" + (data.source === "google-ads" ? " real" : "")}>
@@ -281,9 +303,9 @@ export default function Dashboard() {
           <>
             🔥{" "}
             <span>
-              <b>Datos de ejemplo.</b> Google Ads todavía no está conectado con credenciales completas (falta
-              developer token / OAuth / refresh token válidos) — ver <code>.env.example</code>. Meta Ads y LinkedIn
-              Ads siguen siendo mock hasta conectar Windsor.ai u otra vía.
+              <b>Datos de ejemplo.</b> MVP real en curso: Google Ads + TikTok Ads vía Windsor.ai (ver{" "}
+              <code>specs/003-dashboard-consumos.md</code>). Meta Ads tiene el token de Windsor.ai roto y LinkedIn
+              Ads todavía no está conectado — los 4 siguen siendo mock hasta que se resuelva.
             </span>
           </>
         ) : (
@@ -339,12 +361,23 @@ export default function Dashboard() {
             </span>
             Comparar vs. período anterior
           </button>
+          <div className="stat-chip">
+            <span className="stat-label">Total presupuesto</span>
+            <span className="stat-value num">{fmtCompact(totalBudgetEnabled)}</span>
+          </div>
+          <div className="stat-chip">
+            <span className="stat-label">Total gastado</span>
+            <span className="stat-value num">{fmtCompact(totalSpendEnabled)}</span>
+          </div>
         </div>
         <div className="controls-right chip-row" role="group" aria-label="Mostrar/ocultar plataforma">
-          {PLATFORMS.map((p) => (
+          {platformTotals.map((p) => (
             <button key={p.key} className="chip plat" aria-pressed={enabled[p.key]} onClick={() => togglePlatform(p.key)}>
               <span className="dot" style={{ background: `var(${p.varName})` }} />
               {p.label}
+              <span className="amount num">
+                {fmtCompact(p.spend)}/{fmtCompact(p.budget)}
+              </span>
             </button>
           ))}
         </div>
@@ -545,7 +578,7 @@ export default function Dashboard() {
             </div>
           )}
 
-          <div className="card" style={{ padding: "6px 8px" }}>
+          <div className="card table-scroll-x" style={{ padding: "6px 8px" }}>
             <table className="datatable dense">
               <thead>
                 <tr>
@@ -618,7 +651,7 @@ export default function Dashboard() {
       </div>
 
       <footer className="foot">
-        <span>Fuente de datos: {data.source === "google-ads" ? "Google Ads API (en vivo)" : "mock"} · Meta Ads y LinkedIn Ads: mock hasta conectar Windsor.ai</span>
+        <span>Fuente de datos: {data.source === "google-ads" ? "Google Ads API (en vivo)" : "mock"} · MVP real: Google Ads + TikTok Ads vía Windsor.ai · Meta Ads y LinkedIn Ads: mock</span>
         <span>V2 — sucesor de SDD-TAQUION/mockups/dashboard-consumos.html (V1)</span>
       </footer>
     </div>

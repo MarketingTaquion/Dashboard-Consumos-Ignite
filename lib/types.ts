@@ -1,4 +1,4 @@
-export type PlatformKey = "meta" | "google" | "linkedin";
+export type PlatformKey = "meta" | "google" | "linkedin" | "tiktok";
 
 export interface PlatformCpl {
   target: number;

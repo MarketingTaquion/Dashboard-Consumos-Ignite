@@ -17,6 +17,7 @@
   --plat-meta: #2a78d6;
   --plat-google: #eb6834;
   --plat-linkedin: #1baf7a;
+  --plat-tiktok: #eda100;
   --status-good: #0ca30c;
   --status-warning: #fab219;
   --status-serious: #ec835a;
@@ -43,6 +44,7 @@
     --plat-meta: #3987e5;
     --plat-google: #d95926;
     --plat-linkedin: #199e70;
+    --plat-tiktok: #c98500;
     --delta-good-text: #0ca30c;
     --delta-bad-text: #e66767;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.5);
@@ -122,6 +124,15 @@ header.top .sub { color: var(--text-secondary); margin-top: 4px; font-size: 13.5
 .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
 .chip.plat[aria-pressed="false"] { opacity: .5; }
 .chip .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 7px; vertical-align: 1px; }
+.chip.plat .amount { margin-left: 6px; font-size: 11px; color: var(--text-muted); }
+.chip.plat[aria-pressed="false"] .amount { color: inherit; opacity: .7; }
+
+.stat-chip {
+  border: 1px solid var(--border); background: var(--surface); border-radius: 999px;
+  padding: 7px 14px; display: inline-flex; align-items: baseline; gap: 6px; cursor: default;
+}
+.stat-chip .stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
+.stat-chip .stat-value { font-size: 13px; font-weight: 600; color: var(--text-primary); }
 
 .dropdown-wrap { position: relative; }
 .date-menu {
@@ -217,6 +228,8 @@ table.datatable th { text-align: left; font-family: "Archivo", sans-serif; font-
 table.datatable td { padding: 7px 10px; border-bottom: 1px solid var(--border); }
 table.datatable td.num, table.datatable th.num { text-align: right; }
 .scroll-table { max-height: 260px; overflow-y: auto; border-radius: 8px; border: 1px solid var(--border); }
+.table-scroll-x { overflow-x: auto; }
+.table-scroll-x table.dense { min-width: 720px; }
 
 .health-item { display: flex; gap: 10px; padding: 10px 0; border-top: 1px solid var(--border); }
 .health-item:first-child { border-top: none; }
