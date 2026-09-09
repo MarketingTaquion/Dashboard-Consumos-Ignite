@@ -10,10 +10,8 @@ const PLATFORMS: { key: PlatformKey; label: string; varName: string }[] = [
 ];
 
 // Patrón semanal (lun..dom aproximado) que se repite cada 7 días para dar
-// forma no-lineal a la curva de "acumulado" antes de hoy. Simplificación de
-// la V1 (que tenía un array fijo de 8 días) para que funcione con cualquier
-// "today" real, no solo el día 8 del mock. No afecta el total acumulado a
-// la fecha (ese viene siempre del dato real/mock), solo la forma de la curva.
+// forma no-lineal a la curva de "acumulado" antes de hoy. No afecta el total
+// acumulado a la fecha (ese viene siempre del dato real/mock), solo la forma.
 const WEEK_PATTERN = [1.15, 1.05, 0.95, 1.1, 1.2, 0.55, 0.45];
 
 function fmtCompact(n: number): string {
@@ -25,9 +23,6 @@ function fmtCompact(n: number): string {
 }
 function fmtFull(n: number): string {
   return "$" + Math.round(n).toLocaleString("es-AR");
-}
-function pct(n: number, d: number): string {
-  return d === 0 ? "0%" : Math.round((n / d) * 100) + "%";
 }
 
 type Status = { key: "good" | "warning" | "critical"; label: string; ratio: number };
@@ -97,6 +92,28 @@ const H = 230;
 const plotW = W - M.l - M.r;
 const plotH = H - M.t - M.b;
 
+type SortKey = "pacing" | "objetivo" | "real" | "delta";
+interface SortState {
+  key: SortKey;
+  dir: "asc" | "desc";
+}
+
+interface Row {
+  clientKey: string;
+  clientName: string;
+  platKey: PlatformKey;
+  platLabel: string;
+  platVar: string;
+  pacingPct: number;
+  target: number;
+  real: number;
+  deltaPct: number;
+  label: string;
+  prevPct?: number;
+  statusKey: Status["key"];
+  statusLabel: string;
+}
+
 export default function Dashboard() {
   const [data, setData] = useState<SpendResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -107,6 +124,11 @@ export default function Dashboard() {
     linkedin: true,
   });
   const [view, setView] = useState<"chart" | "table">("chart");
+  const [chartOpen, setChartOpen] = useState(false);
+  const [compareOn, setCompareOn] = useState(false);
+  const [dateMenuOpen, setDateMenuOpen] = useState(false);
+  const [bannerOpen, setBannerOpen] = useState(false);
+  const [sort, setSort] = useState<SortState>({ key: "delta", dir: "desc" });
   const [tooltip, setTooltip] = useState<{ x: number; y: number; day: number } | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -119,8 +141,6 @@ export default function Dashboard() {
       .then((body: SpendResponse) => setData(body))
       .catch((err) => setError(String(err?.message || err)));
   }, []);
-
-  const clientOrder = useMemo(() => (data ? data.clients.map((c) => c.key) : []), [data]);
 
   const clientsIncluded = useMemo(() => {
     if (!data) return [];
@@ -149,19 +169,6 @@ export default function Dashboard() {
 
   const { today, daysInMonth } = data;
   const idealPct = today / daysInMonth;
-  const idealGuidePct = (idealPct * 100).toFixed(1);
-
-  const riskCount = data.clients.filter((c) => statusFor(c, today, daysInMonth).key !== "good").length;
-  const alertCount = data.clients.reduce((a, c) => a + c.health.length, 0);
-
-  const totalBudget = clientsIncluded.reduce((a, c) => a + c.budget, 0);
-  const totalSpend = clientsIncluded.reduce((a, c) => a + c.spend8, 0);
-  const flatAgg = clientsIncluded.reduce((a, c) => a + c.spend8 / today, 0);
-  const projectedAgg = totalSpend + flatAgg * (daysInMonth - today);
-  const ratioAgg = totalBudget === 0 ? 0 : projectedAgg / totalBudget;
-  const deltaPP = Math.round((totalSpend / totalBudget - idealPct) * 1000) / 10;
-  const aggStatus: Status["key"] = ratioAgg > 1.1 ? "warning" : ratioAgg < 0.85 ? "critical" : "good";
-  const aggLabel = aggStatus === "warning" ? "Sobre-ritmo" : aggStatus === "critical" ? "Bajo-ritmo" : "En ritmo";
 
   const maxV = Math.max(series.budget, series.cumulative[daysInMonth - 1]) * 1.12 || 1;
   const xFor = (day: number) => M.l + ((day - 1) / (daysInMonth - 1)) * plotW;
@@ -206,24 +213,66 @@ export default function Dashboard() {
     setTooltip({ x: evt.clientX - rect.left + 14, y: evt.clientY - rect.top - 48, day });
   }
 
-  const effRows: { client: string; plat: string; label: string; target: number; real: number; delta: number }[] = [];
+  // ---- filas de la tabla densa (cliente × plataforma) ----
+  const rows: Row[] = [];
   clientsIncluded.forEach((c) => {
+    const st = statusFor(c, today, daysInMonth);
+    const pacingPct = c.budget === 0 ? 0 : (c.spend8 / c.budget) * 100;
     PLATFORMS.forEach((p) => {
       if (!enabled[p.key]) return;
       const e = c.cpl[p.key];
       if (!e) return;
-      const delta = Math.round(((e.real - e.target) / e.target) * 1000) / 10;
-      effRows.push({ client: c.name, plat: p.label, label: e.label || "CPL", target: e.target, real: e.real, delta });
+      const deltaPct = Math.round(((e.real - e.target) / e.target) * 1000) / 10;
+      rows.push({
+        clientKey: c.key,
+        clientName: c.name,
+        platKey: p.key,
+        platLabel: p.label,
+        platVar: p.varName,
+        pacingPct,
+        target: e.target,
+        real: e.real,
+        deltaPct,
+        label: e.label || "CPL",
+        prevPct: e.prevPeriodDeltaPct,
+        statusKey: st.key,
+        statusLabel: st.label,
+      });
     });
   });
-  effRows.sort((a, b) => b.delta - a.delta);
+
+  function sortVal(r: Row): number {
+    switch (sort.key) {
+      case "pacing":
+        return r.pacingPct;
+      case "objetivo":
+        return r.target;
+      case "real":
+        return r.real;
+      case "delta":
+        return r.deltaPct;
+    }
+  }
+  const sortedRows = [...rows].sort((a, b) => (sortVal(a) - sortVal(b)) * (sort.dir === "desc" ? -1 : 1));
+
+  function onSort(key: SortKey) {
+    setSort((prev) => (prev.key === key ? { key, dir: prev.dir === "desc" ? "asc" : "desc" } : { key, dir: "desc" }));
+  }
+  function sortIcon(key: SortKey) {
+    if (sort.key !== key) return <span className="sort-ico">⇅</span>;
+    return <span className="sort-ico active">{sort.dir === "desc" ? "▼" : "▲"}</span>;
+  }
+  function prevLabel(p?: number): string {
+    if (p === undefined) return "—";
+    if (p > 0) return `▲ +${p}%`;
+    if (p < 0) return `▼ ${p}%`;
+    return "● 0%";
+  }
 
   const healthItems: { client: string; platform: string; text: string; sev: string }[] = [];
   clientsIncluded.forEach((c) => c.health.forEach((h) => healthItems.push({ client: c.name, ...h })));
 
-  const gaBaseSessions = 24680;
-  const gaFactor = clientKey === "all" ? 1 : clientsIncluded[0].spend8 / 14_350_000;
-  const gaSessions = Math.round(gaBaseSessions * gaFactor);
+  const colCount = 7 + (compareOn ? 1 : 0);
 
   return (
     <div className="wrap">
@@ -258,30 +307,42 @@ export default function Dashboard() {
           <h1>Pulso Ignite</h1>
           <div className="sub">Consumo de pauta multi-cliente — equipo Ignite, Taquión</div>
         </div>
-        <div className="date-badge">
-          Día <b>{today}</b> de {daysInMonth} · ritmo ideal <b>{Math.round(idealPct * 1000) / 10}%</b>
+        <div className="num" style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
+          Día <b style={{ color: "var(--text-primary)" }}>{today}</b> de {daysInMonth} · ritmo ideal{" "}
+          <b style={{ color: "var(--text-primary)" }}>{Math.round(idealPct * 1000) / 10}%</b>
         </div>
       </header>
 
-      <div className="filters">
-        <div className="chip-row" role="group" aria-label="Filtrar por cliente">
-          <button className="chip" aria-pressed={clientKey === "all"} onClick={() => setClientKey("all")}>
-            Todos los clientes
-          </button>
-          {data.clients.map((c) => (
-            <button key={c.key} className="chip" aria-pressed={clientKey === c.key} onClick={() => setClientKey(c.key)}>
-              {c.name}
+      <div className="controls-row">
+        <div className="controls-left">
+          <div className="dropdown-wrap">
+            <button className="chip" aria-expanded={dateMenuOpen} onClick={() => setDateMenuOpen((v) => !v)}>
+              📅 Mes en curso <span style={{ fontSize: 10 }}>▾</span>
             </button>
-          ))}
+            {dateMenuOpen && (
+              <div className="date-menu" role="menu">
+                <button role="menuitem" aria-current="true" onClick={() => setDateMenuOpen(false)}>
+                  Mes en curso
+                </button>
+                <button role="menuitem" disabled title="Todavía no disponible">
+                  Últimos 7 días <span className="soon">pronto</span>
+                </button>
+                <button role="menuitem" disabled title="Todavía no disponible">
+                  Mes anterior <span className="soon">pronto</span>
+                </button>
+              </div>
+            )}
+          </div>
+          <button className="toggle-chip" aria-pressed={compareOn} onClick={() => setCompareOn((v) => !v)}>
+            <span className="toggle-track">
+              <span className="toggle-knob" />
+            </span>
+            Comparar vs. período anterior
+          </button>
         </div>
-        <div className="chip-row" role="group" aria-label="Mostrar/ocultar plataforma">
+        <div className="controls-right chip-row" role="group" aria-label="Mostrar/ocultar plataforma">
           {PLATFORMS.map((p) => (
-            <button
-              key={p.key}
-              className="chip plat"
-              aria-pressed={enabled[p.key]}
-              onClick={() => togglePlatform(p.key)}
-            >
+            <button key={p.key} className="chip plat" aria-pressed={enabled[p.key]} onClick={() => togglePlatform(p.key)}>
               <span className="dot" style={{ background: `var(${p.varName})` }} />
               {p.label}
             </button>
@@ -289,336 +350,269 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="stat-grid">
-        <div className="stat-tile">
-          <div className="eyebrow">{clientKey === "all" ? "Invertido MTD · agencia" : "Invertido MTD"}</div>
-          <div className="value num">
-            {fmtCompact(totalSpend)} <small>de {fmtCompact(totalBudget)}</small>
-          </div>
-          <div className="delta">{pct(totalSpend, totalBudget)} consumido</div>
-        </div>
-        <div className="stat-tile">
-          <div className="eyebrow">Ritmo proyectado a fin de mes</div>
-          <div className="value num">
-            {Math.round(ratioAgg * 100)}
-            <small>% del presupuesto</small>{" "}
-            <span className={"pill " + aggStatus}>
-              <span className="dot" />
-              {aggLabel}
-            </span>
-          </div>
-          <div className="delta">
-            {deltaPP >= 0 ? "+" : ""}
-            {deltaPP} pp vs. ritmo ideal
+      <div className="op-layout">
+        <div className="card sidebar">
+          <div className="eyebrow">Clientes</div>
+          <div className="client-list">
+            <button className="client-row" aria-pressed={clientKey === "all"} onClick={() => setClientKey("all")}>
+              Todos los clientes
+            </button>
+            {data.clients.map((c) => {
+              const st = statusFor(c, today, daysInMonth);
+              return (
+                <button key={c.key} className="client-row" aria-pressed={clientKey === c.key} onClick={() => setClientKey(c.key)}>
+                  <span className={"status-dot " + st.key} />
+                  {c.name}
+                </button>
+              );
+            })}
           </div>
         </div>
-        {clientKey === "all" ? (
-          <>
-            <div className="stat-tile">
-              <div className="eyebrow">Clientes en riesgo</div>
-              <div className="value num">
-                {riskCount} <small>de {data.clients.length}</small>
-              </div>
-              <div className="delta">pacing fuera de rango</div>
-            </div>
-            <div className="stat-tile">
-              <div className="eyebrow">Alertas técnicas activas</div>
-              <div className="value num">{alertCount}</div>
-              <div className="delta">tracking / sincronización</div>
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="stat-tile">
-              <div className="eyebrow">Vertical</div>
-              <div className="value" style={{ fontSize: 16 }}>
-                {clientsIncluded[0].vertical}
-              </div>
-            </div>
-            <div className="stat-tile">
-              <div className="eyebrow">Alertas técnicas</div>
-              <div className="value num">{clientsIncluded[0].health.length}</div>
-              <div className="delta">{clientsIncluded[0].health.length ? "requiere atención" : "sin novedades"}</div>
-            </div>
-          </>
-        )}
-      </div>
 
-      <div className="main-grid">
-        <div>
-          <div className="card">
-            <div className="card-head">
-              <div>
-                <h2>Ritmo de consumo</h2>
-                <div className="card-sub">
-                  {clientKey === "all" ? "Todos los clientes" : clientsIncluded[0].name} · plataformas:{" "}
-                  {PLATFORMS.filter((p) => enabled[p.key]).map((p) => p.label).join(", ")}
-                </div>
-              </div>
-              <div className="chart-toolbar">
-                <button className="toolbar-btn" aria-pressed={view === "chart"} onClick={() => setView("chart")}>
-                  Gráfico
-                </button>
-                <button className="toolbar-btn" aria-pressed={view === "table"} onClick={() => setView("table")}>
-                  Tabla
-                </button>
-              </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="card banner">
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span className={"pill " + (healthItems.length ? "warning" : "good")}>
+                <span className="dot" />
+              </span>
+              <span>
+                {healthItems.length > 0 ? (
+                  <>
+                    <b>
+                      {healthItems.length} alerta{healthItems.length === 1 ? "" : "s"} técnica
+                      {healthItems.length === 1 ? "" : "s"}
+                    </b>{" "}
+                    activa{healthItems.length === 1 ? "" : "s"} — tracking y sincronización
+                  </>
+                ) : (
+                  "Sin alertas técnicas para esta selección"
+                )}
+              </span>
             </div>
-
-            {view === "chart" ? (
-              <div className="chart-wrap">
-                <svg
-                  ref={svgRef}
-                  className="chart-svg"
-                  viewBox={`0 0 ${W} ${H}`}
-                  role="img"
-                  aria-label="Consumo acumulado de pauta por día"
-                  onMouseMove={onSvgMouseMove}
-                  onMouseLeave={() => setTooltip(null)}
-                >
-                  {yTicks.map((v, i) => (
-                    <g key={i}>
-                      <line x1={M.l} y1={yFor(v)} x2={M.l + plotW} y2={yFor(v)} stroke="var(--grid)" strokeWidth={1} />
-                      <text className="tick-label" x={M.l - 8} y={yFor(v) + 3} textAnchor="end">
-                        {fmtCompact(v)}
-                      </text>
-                    </g>
-                  ))}
-                  {xTicks.map((d) => (
-                    <text key={d} className="tick-label" x={xFor(d)} y={H - 6} textAnchor="middle">
-                      {d}
-                      {d === today ? " (hoy)" : ""}
-                    </text>
-                  ))}
-                  <line
-                    x1={xFor(today)}
-                    y1={M.t}
-                    x2={xFor(today)}
-                    y2={baseY}
-                    stroke="var(--axis)"
-                    strokeWidth={1}
-                    strokeDasharray="2 3"
-                  />
-                  <path d={pathOf(idealPts)} fill="none" stroke="var(--text-muted)" strokeWidth={1.5} strokeDasharray="1 4" strokeLinecap="round" />
-                  <path d={areaPath} fill="var(--accent-fill)" />
-                  <path d={pathOf(actualPts)} fill="none" stroke="var(--accent)" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
-                  <path d={pathOf(projPts)} fill="none" stroke="var(--accent)" strokeWidth={2} strokeLinecap="round" strokeDasharray="5 4" opacity={0.65} />
-                  <circle cx={actualPts[actualPts.length - 1][0]} cy={actualPts[actualPts.length - 1][1]} r={3.5} fill="var(--accent)" />
-                </svg>
-                <div className="tooltip" style={{ opacity: tooltip ? 1 : 0, left: tooltip?.x, top: tooltip?.y }}>
-                  {tooltip && (
-                    <>
-                      <div className="t-day">
-                        Día {tooltip.day}
-                        {tooltip.day > today ? " (proyectado)" : ""}
+            {healthItems.length > 0 && (
+              <button className="link-btn" onClick={() => setBannerOpen((v) => !v)}>
+                {bannerOpen ? "Ocultar ↑" : "Ver detalle →"}
+              </button>
+            )}
+            {bannerOpen && healthItems.length > 0 && (
+              <div className="banner-detail">
+                {healthItems.map((it, i) => (
+                  <div className="health-item" key={i}>
+                    <div className={"stripe " + it.sev} />
+                    <div>
+                      <div className="h-title">
+                        {it.client} · {it.platform}
                       </div>
-                      <div className="t-row num">
-                        <span>Acumulado</span>
-                        <span>{fmtFull(series.cumulative[tooltip.day - 1])}</span>
-                      </div>
-                      <div className="t-row num">
-                        <span>Ritmo ideal</span>
-                        <span>{fmtFull(series.ideal[tooltip.day - 1])}</span>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="scroll-table">
-                <table className="datatable">
-                  <thead>
-                    <tr>
-                      <th>Día</th>
-                      <th className="num">Acumulado</th>
-                      <th className="num">Ritmo ideal</th>
-                      <th className="num">Δ vs. ideal</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {series.cumulative.map((v, d) => {
-                      const iv = series.ideal[d];
-                      const delta = iv === 0 ? 0 : Math.round(((v - iv) / iv) * 1000) / 10;
-                      return (
-                        <tr key={d}>
-                          <td>
-                            Día {d + 1}
-                            {d + 1 === today ? " · hoy" : d + 1 > today ? " · proy." : ""}
-                          </td>
-                          <td className="num">{fmtFull(v)}</td>
-                          <td className="num">{fmtFull(iv)}</td>
-                          <td className="num" style={{ color: delta >= 0 ? "var(--delta-good-text)" : "var(--delta-bad-text)" }}>
-                            {delta >= 0 ? "+" : ""}
-                            {delta}%
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                      <div className="h-sub">{it.text}</div>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
-
-            <div className="chart-insight">
-              <b>{Math.round(ratioForInsight * 100)}%</b> del presupuesto habilitado proyectado a fin de mes — {insightWord}{" "}
-              del ritmo ideal (100%). Línea sólida = real a la fecha, punteada corta = proyección, punteada fina = ritmo
-              ideal.
-            </div>
           </div>
 
-          <div className="card">
-            <h2>Eficiencia por plataforma</h2>
-            <div className="card-sub" style={{ marginBottom: 12 }}>
-              Costo por resultado real vs. objetivo del media plan
-            </div>
-            <div className="scroll-table">
-              <table className="datatable">
-                <thead>
-                  <tr>
-                    <th>Cliente</th>
-                    <th>Plataforma</th>
-                    <th className="num">Objetivo</th>
-                    <th className="num">Real</th>
-                    <th className="num">Δ</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {effRows.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} style={{ color: "var(--text-muted)" }}>
-                        Sin datos para esta combinación de filtros.
-                      </td>
-                    </tr>
-                  ) : (
-                    effRows.map((r, i) => (
-                      <tr key={i}>
-                        <td>{r.client}</td>
-                        <td>
-                          {r.plat} <span style={{ color: "var(--text-muted)", fontSize: 10.5 }}>({r.label})</span>
-                        </td>
-                        <td className="num">{fmtFull(r.target)}</td>
-                        <td className="num">{fmtFull(r.real)}</td>
-                        <td className="num" style={{ color: r.delta <= 0 ? "var(--delta-good-text)" : "var(--delta-bad-text)" }}>
-                          {r.delta > 0 ? "+" : ""}
-                          {r.delta}%
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
+          <div
+            className="card chart-toggle-row"
+            role="button"
+            tabIndex={0}
+            onClick={() => setChartOpen((v) => !v)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") setChartOpen((v) => !v);
+            }}
+          >
+            <span>Ritmo de consumo</span>
+            <span style={{ fontWeight: 600, color: "var(--accent)" }}>{chartOpen ? "Contraer ▲" : "Expandir gráfico ▾"}</span>
           </div>
-        </div>
 
-        <div>
-          <div className="card">
-            <div className="card-head">
-              <h2>Pacing por cliente</h2>
-            </div>
-            <div className="legend-row">
-              {PLATFORMS.map((p) => (
-                <span className="lg" key={p.key}>
-                  <span className="sw" style={{ background: `var(${p.varName})` }} />
-                  {p.label}
-                </span>
-              ))}
-            </div>
-            <div className="pacing-list">
-              <div className="ideal-guide" style={{ left: idealGuidePct + "%" }}>
-                <span className="lbl">
-                  Ritmo ideal · día {today}/{daysInMonth}
-                </span>
+          {chartOpen && (
+            <div className="card">
+              <div className="card-head">
+                <div>
+                  <div className="card-sub">
+                    {clientKey === "all" ? "Todos los clientes" : clientsIncluded[0].name} · plataformas:{" "}
+                    {PLATFORMS.filter((p) => enabled[p.key]).map((p) => p.label).join(", ")}
+                  </div>
+                </div>
+                <div className="chart-toolbar">
+                  <button className="toolbar-btn" aria-pressed={view === "chart"} onClick={() => setView("chart")}>
+                    Gráfico
+                  </button>
+                  <button className="toolbar-btn" aria-pressed={view === "table"} onClick={() => setView("table")}>
+                    Tabla
+                  </button>
+                </div>
               </div>
-              {data.clients.map((c) => {
-                const st = statusFor(c, today, daysInMonth);
-                const fillPct = Math.min(100, (c.spend8 / c.budget) * 100);
-                const dimmed = clientKey !== "all" && clientKey !== c.key;
-                return (
-                  <div className="pacing-row" key={c.key} style={{ opacity: dimmed ? 0.4 : 1 }}>
-                    <div className="row-top">
-                      <div>
-                        <span className="name">{c.name}</span>
-                        <span className="vertical">{c.vertical}</span>
-                      </div>
-                      <div className="figures">
-                        <span className={"pill " + st.key}>
-                          <span className="dot" />
-                          {st.label}
-                        </span>{" "}
-                        &nbsp;{" "}
-                        <span className="num">
-                          {fmtCompact(c.spend8)} / {fmtCompact(c.budget)}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="track">
-                      <div className={"fill " + st.key} style={{ width: fillPct + "%" }} />
-                    </div>
-                    <div className="mix-row">
-                      {PLATFORMS.map((p) => {
-                        const w = c.mix[p.key] || 0;
-                        if (w === 0) return null;
+
+              {view === "chart" ? (
+                <div className="chart-wrap">
+                  <svg
+                    ref={svgRef}
+                    className="chart-svg"
+                    viewBox={`0 0 ${W} ${H}`}
+                    role="img"
+                    aria-label="Consumo acumulado de pauta por día"
+                    onMouseMove={onSvgMouseMove}
+                    onMouseLeave={() => setTooltip(null)}
+                  >
+                    {yTicks.map((v, i) => (
+                      <g key={i}>
+                        <line x1={M.l} y1={yFor(v)} x2={M.l + plotW} y2={yFor(v)} stroke="var(--grid)" strokeWidth={1} />
+                        <text className="tick-label" x={M.l - 8} y={yFor(v) + 3} textAnchor="end">
+                          {fmtCompact(v)}
+                        </text>
+                      </g>
+                    ))}
+                    {xTicks.map((d) => (
+                      <text key={d} className="tick-label" x={xFor(d)} y={H - 6} textAnchor="middle">
+                        {d}
+                        {d === today ? " (hoy)" : ""}
+                      </text>
+                    ))}
+                    <line
+                      x1={xFor(today)}
+                      y1={M.t}
+                      x2={xFor(today)}
+                      y2={baseY}
+                      stroke="var(--axis)"
+                      strokeWidth={1}
+                      strokeDasharray="2 3"
+                    />
+                    <path d={pathOf(idealPts)} fill="none" stroke="var(--text-muted)" strokeWidth={1.5} strokeDasharray="1 4" strokeLinecap="round" />
+                    <path d={areaPath} fill="var(--accent-fill)" />
+                    <path d={pathOf(actualPts)} fill="none" stroke="var(--accent)" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+                    <path d={pathOf(projPts)} fill="none" stroke="var(--accent)" strokeWidth={2} strokeLinecap="round" strokeDasharray="5 4" opacity={0.65} />
+                    <circle cx={actualPts[actualPts.length - 1][0]} cy={actualPts[actualPts.length - 1][1]} r={3.5} fill="var(--accent)" />
+                  </svg>
+                  <div className="tooltip" style={{ opacity: tooltip ? 1 : 0, left: tooltip?.x, top: tooltip?.y }}>
+                    {tooltip && (
+                      <>
+                        <div className="t-day">
+                          Día {tooltip.day}
+                          {tooltip.day > today ? " (proyectado)" : ""}
+                        </div>
+                        <div className="t-row num">
+                          <span>Acumulado</span>
+                          <span>{fmtFull(series.cumulative[tooltip.day - 1])}</span>
+                        </div>
+                        <div className="t-row num">
+                          <span>Ritmo ideal</span>
+                          <span>{fmtFull(series.ideal[tooltip.day - 1])}</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="scroll-table">
+                  <table className="datatable">
+                    <thead>
+                      <tr>
+                        <th>Día</th>
+                        <th className="num">Acumulado</th>
+                        <th className="num">Ritmo ideal</th>
+                        <th className="num">Δ vs. ideal</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {series.cumulative.map((v, d) => {
+                        const iv = series.ideal[d];
+                        const delta = iv === 0 ? 0 : Math.round(((v - iv) / iv) * 1000) / 10;
                         return (
-                          <div
-                            key={p.key}
-                            className="mix-seg"
-                            style={{ width: w + "%", background: `var(${p.varName})`, opacity: enabled[p.key] ? 1 : 0.25 }}
-                          />
+                          <tr key={d}>
+                            <td>
+                              Día {d + 1}
+                              {d + 1 === today ? " · hoy" : d + 1 > today ? " · proy." : ""}
+                            </td>
+                            <td className="num">{fmtFull(v)}</td>
+                            <td className="num">{fmtFull(iv)}</td>
+                            <td className="num" style={{ color: delta >= 0 ? "var(--delta-good-text)" : "var(--delta-bad-text)" }}>
+                              {delta >= 0 ? "+" : ""}
+                              {delta}%
+                            </td>
+                          </tr>
                         );
                       })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+                    </tbody>
+                  </table>
+                </div>
+              )}
 
-          <div className="card">
-            <h2>Salud técnica</h2>
-            <div className="card-sub" style={{ marginBottom: 6 }}>
-              Tracking y sincronización de datos
-            </div>
-            {healthItems.length === 0 ? (
-              <div className="health-empty">Sin alertas técnicas para esta selección.</div>
-            ) : (
-              healthItems.map((it, i) => (
-                <div className="health-item" key={i}>
-                  <div className={"stripe " + it.sev} />
-                  <div>
-                    <div className="h-title">
-                      {it.client} · {it.platform}
-                    </div>
-                    <div className="h-sub">{it.text}</div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-
-          <div className="card">
-            <h2>Señal complementaria</h2>
-            <div className="ga-box">
-              <div className="ga-label">Google Analytics — comportamiento post-clic, no es gasto de pauta</div>
-              <div className="ga-stats">
-                <div className="g">
-                  <div className="v num">{gaSessions.toLocaleString("es-AR")}</div>
-                  <div className="l">Sesiones desde pauta (MTD)</div>
-                </div>
-                <div className="g">
-                  <div className="v num">3,4%</div>
-                  <div className="l">Conversión on-site</div>
-                </div>
-                <div className="g">
-                  <div className="v num">41%</div>
-                  <div className="l">Bounce rate landing</div>
-                </div>
-                <div className="g">
-                  <div className="v num">1:52</div>
-                  <div className="l">Tiempo promedio en página</div>
-                </div>
+              <div className="chart-insight">
+                <b>{Math.round(ratioForInsight * 100)}%</b> del presupuesto habilitado proyectado a fin de mes — {insightWord}{" "}
+                del ritmo ideal (100%). Línea sólida = real a la fecha, punteada corta = proyección, punteada fina = ritmo
+                ideal.
               </div>
             </div>
+          )}
+
+          <div className="card" style={{ padding: "6px 8px" }}>
+            <table className="datatable dense">
+              <thead>
+                <tr>
+                  <th>Cliente</th>
+                  <th>Plataforma</th>
+                  <th className="sortable" onClick={() => onSort("pacing")}>
+                    Pacing{sortIcon("pacing")}
+                  </th>
+                  <th className="num sortable" onClick={() => onSort("objetivo")}>
+                    Objetivo{sortIcon("objetivo")}
+                  </th>
+                  <th className="num sortable" onClick={() => onSort("real")}>
+                    Real{sortIcon("real")}
+                  </th>
+                  <th className="num sortable" onClick={() => onSort("delta")}>
+                    Δ{sortIcon("delta")}
+                  </th>
+                  {compareOn && <th className="num">Vs. per. ant.</th>}
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={colCount} style={{ color: "var(--text-muted)" }}>
+                      Sin datos para esta combinación de filtros.
+                    </td>
+                  </tr>
+                ) : (
+                  sortedRows.map((r, i) => (
+                    <tr key={i}>
+                      <td>{r.clientName}</td>
+                      <td>
+                        <span className="plat-dot" style={{ background: `var(${r.platVar})` }} />
+                        {r.platLabel}
+                        {r.label !== "CPL" && <span style={{ color: "var(--text-muted)", fontSize: 11 }}> ({r.label})</span>}
+                      </td>
+                      <td>
+                        <span className="mini-track">
+                          <span className={"mini-fill " + r.statusKey} style={{ width: Math.min(100, r.pacingPct) + "%" }} />
+                        </span>
+                        <span className="num" style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                          {Math.round(r.pacingPct)}%
+                        </span>
+                      </td>
+                      <td className="num">{fmtFull(r.target)}</td>
+                      <td className="num">{fmtFull(r.real)}</td>
+                      <td className="num" style={{ color: r.deltaPct <= 0 ? "var(--delta-good-text)" : "var(--delta-bad-text)" }}>
+                        {r.deltaPct > 0 ? "+" : ""}
+                        {r.deltaPct}%
+                      </td>
+                      {compareOn && (
+                        <td className="num" style={{ color: "var(--text-secondary)", fontSize: 12 }}>
+                          {prevLabel(r.prevPct)}
+                        </td>
+                      )}
+                      <td>
+                        <span className={"pill " + r.statusKey}>
+                          <span className="dot" />
+                          {r.statusLabel}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>

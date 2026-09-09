@@ -4,6 +4,7 @@ export interface PlatformCpl {
   target: number;
   real: number;
   label?: string; // ej. "CPME" en vez de "CPL" para clientes de comunidad
+  prevPeriodDeltaPct?: number; // % de cambio del pacing vs. el período anterior (ilustrativo hasta tener histórico real)
 }
 
 export interface HealthIssue {
