@@ -1,76 +1,86 @@
-@import url("https://fonts.googleapis.com/css2?family=Archivo:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;900&display=swap");
 
+/* Identidad: Taquion 2026 Design System (ver design/../"Taquion 2026 Design System"
+   en SDD-TAQUION). --plat-* (color por plataforma) y --status-* (semáforo
+   bueno/alerta/crítico) son una EXCEPCIÓN FUNCIONAL documentada: la marca Taquion
+   no define ninguno de los dos (paleta de marca = negro/blanco/grises + fucsia/
+   naranja/azul, una sola serie de dato a la vez) pero este dashboard necesita
+   distinguir 4 plataformas simultáneas y alertas de pacing de un vistazo. Ver
+   docs/reference/design-tokens.md. */
 :root {
   color-scheme: light;
-  --bg: #f5f4fa;
+  --bg: #f5f5f6;
   --surface: #ffffff;
-  --surface-2: #efedf6;
-  --border: rgba(22, 18, 31, 0.1);
-  --border-strong: rgba(22, 18, 31, 0.18);
-  --text-primary: #16121f;
-  --text-secondary: #4d4860;
-  --text-muted: #8b869c;
-  --accent: #4a3aa7;
-  --accent-fill: rgba(74, 58, 167, 0.14);
-  --grid: rgba(22, 18, 31, 0.09);
-  --axis: rgba(22, 18, 31, 0.3);
+  --surface-2: #ebebed;
+  --border: rgba(0, 0, 0, 0.12);
+  --border-strong: rgba(0, 0, 0, 0.22);
+  --text-primary: #000000;
+  --text-secondary: #2d2d2d;
+  --text-muted: #666666;
+  --accent: #ff00b8;
+  --accent-fill: rgba(255, 0, 184, 0.12);
+  --grid: rgba(0, 0, 0, 0.08);
+  --axis: rgba(0, 0, 0, 0.32);
+  /* Excepción funcional — colores de plataforma, no de marca */
   --plat-meta: #2a78d6;
   --plat-google: #eb6834;
   --plat-linkedin: #1baf7a;
   --plat-tiktok: #eda100;
+  /* Excepción funcional — semáforo de pacing, no existe en la marca */
   --status-good: #0ca30c;
   --status-warning: #fab219;
   --status-serious: #ec835a;
   --status-critical: #d03b3b;
   --delta-good-text: #006300;
   --delta-bad-text: #b7291c;
-  --shadow: 0 1px 2px rgba(22, 18, 31, 0.06), 0 8px 24px -12px rgba(22, 18, 31, 0.18);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --bg: #100e17;
-    --surface: #18151f;
-    --surface-2: #201d2b;
-    --border: rgba(255, 255, 255, 0.1);
+    /* Negro puro + panel #141414 — el tratamiento de "Tablero" del propio DS */
+    --bg: #000000;
+    --surface: #141414;
+    --surface-2: #1f1f1f;
+    --border: rgba(255, 255, 255, 0.08);
     --border-strong: rgba(255, 255, 255, 0.18);
-    --text-primary: #f6f4fb;
-    --text-secondary: #c3bdd6;
-    --text-muted: #8d87a1;
-    --accent: #9085e9;
-    --accent-fill: rgba(144, 133, 233, 0.2);
+    --text-primary: #ffffff;
+    --text-secondary: rgba(255, 255, 255, 0.72);
+    --text-muted: rgba(255, 255, 255, 0.45);
+    --accent: #ff00b8;
+    --accent-fill: rgba(255, 0, 184, 0.2);
     --grid: rgba(255, 255, 255, 0.08);
     --axis: rgba(255, 255, 255, 0.3);
     --plat-meta: #3987e5;
-    --plat-google: #d95926;
-    --plat-linkedin: #199e70;
-    --plat-tiktok: #c98500;
-    --delta-good-text: #0ca30c;
-    --delta-bad-text: #e66767;
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.5);
+    --plat-google: #f07a44;
+    --plat-linkedin: #22c48a;
+    --plat-tiktok: #f2b32e;
+    --delta-good-text: #33d17a;
+    --delta-bad-text: #ff6b6b;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
   }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #100e17;
-  --surface: #18151f;
-  --surface-2: #201d2b;
-  --border: rgba(255, 255, 255, 0.1);
+  --bg: #000000;
+  --surface: #141414;
+  --surface-2: #1f1f1f;
+  --border: rgba(255, 255, 255, 0.08);
   --border-strong: rgba(255, 255, 255, 0.18);
-  --text-primary: #f6f4fb;
-  --text-secondary: #c3bdd6;
-  --text-muted: #8d87a1;
-  --accent: #9085e9;
-  --accent-fill: rgba(144, 133, 233, 0.2);
+  --text-primary: #ffffff;
+  --text-secondary: rgba(255, 255, 255, 0.72);
+  --text-muted: rgba(255, 255, 255, 0.45);
+  --accent: #ff00b8;
+  --accent-fill: rgba(255, 0, 184, 0.2);
   --grid: rgba(255, 255, 255, 0.08);
   --axis: rgba(255, 255, 255, 0.3);
   --plat-meta: #3987e5;
-  --plat-google: #d95926;
-  --plat-linkedin: #199e70;
-  --plat-tiktok: #c98500;
-  --delta-good-text: #0ca30c;
-  --delta-bad-text: #e66767;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.5);
+  --plat-google: #f07a44;
+  --plat-linkedin: #22c48a;
+  --plat-tiktok: #f2b32e;
+  --delta-good-text: #33d17a;
+  --delta-bad-text: #ff6b6b;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 
 * { box-sizing: border-box; }
@@ -81,21 +91,23 @@
 html, body { background: var(--bg); }
 body {
   color: var(--text-primary);
-  font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
   font-size: 14px;
   line-height: 1.5;
   margin: 0;
 }
-.num { font-family: "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
-h1, h2, h3 { font-family: "Archivo", system-ui, sans-serif; margin: 0; }
+.num { font-family: "Archivo", system-ui, sans-serif; font-variant-numeric: tabular-nums; font-weight: 600; }
+h1, h2, h3 { font-family: "Archivo", system-ui, sans-serif; font-weight: 900; letter-spacing: -0.02em; margin: 0; }
 .eyebrow {
   font-family: "Archivo", system-ui, sans-serif;
   font-weight: 700;
   font-size: 11px;
   letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: var(--text-muted);
+  color: var(--accent);
 }
+/* Flecha ↘ — el signo de categoría del sistema, reemplaza cualquier emoji */
+.tq-arrow { color: var(--accent); font-weight: 700; margin-right: 2px; }
 button { font: inherit; color: inherit; background: none; border: none; }
 button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
@@ -111,7 +123,10 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--accent
 .mock-note.real { border-style: solid; border-color: var(--status-good); }
 
 header.top { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 22px; flex-wrap: wrap; }
-header.top h1 { font-size: 26px; font-weight: 700; }
+header.top h1 { font-size: 26px; font-weight: 900; }
+.brand-mark { display: block; flex-shrink: 0; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .brand-mark { filter: invert(1); } }
+:root[data-theme="dark"] .brand-mark { filter: invert(1); }
 header.top .sub { color: var(--text-secondary); margin-top: 4px; font-size: 13.5px; }
 .controls-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
 .controls-left, .controls-right { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
@@ -138,7 +153,7 @@ header.top .sub { color: var(--text-secondary); margin-top: 4px; font-size: 13.5
 .dropdown-wrap { position: relative; }
 .date-menu {
   position: absolute; top: calc(100% + 6px); left: 0; z-index: 20;
-  background: var(--surface); border: 1px solid var(--border-strong); border-radius: 10px;
+  background: var(--surface); border: 1px solid var(--border-strong); border-radius: 8px;
   box-shadow: var(--shadow); padding: 6px; min-width: 200px;
 }
 .date-menu button { display: flex; justify-content: space-between; align-items: center; width: 100%; text-align: left; padding: 8px 10px; border-radius: 6px; font-size: 13px; color: var(--text-secondary); }
@@ -150,11 +165,11 @@ header.top .sub { color: var(--text-secondary); margin-top: 4px; font-size: 13.5
 .date-custom { padding: 8px 10px 4px; display: flex; flex-direction: column; gap: 8px; }
 .date-custom label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--text-secondary); }
 .date-custom input[type="date"] {
-  font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 6px;
+  font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 4px;
   border: 1px solid var(--border); background: var(--surface); color: var(--text-primary);
 }
 .date-apply {
-  align-self: flex-start; background: var(--accent); color: #fff; border-radius: 6px;
+  align-self: flex-start; background: var(--accent); color: #fff; border-radius: 4px;
   padding: 6px 12px; font-size: 12.5px; font-weight: 600;
 }
 .date-menu-note { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
@@ -186,8 +201,9 @@ header.top .sub { color: var(--text-secondary); margin-top: 4px; font-size: 13.5
 .pill.critical { background: color-mix(in srgb, var(--status-critical) 18%, transparent); color: var(--delta-bad-text); }
 .pill.critical .dot { background: var(--status-critical); }
 
-.card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 18px 20px 20px; box-shadow: var(--shadow); margin-bottom: 18px; }
-.card h2 { font-size: 15px; font-weight: 700; }
+/* Cards: hairline + radio 8 — el DS no lleva sombra en cards, la separación la da el contraste */
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 18px 20px 20px; margin-bottom: 18px; }
+.card h2 { font-size: 15px; font-weight: 700; letter-spacing: -0.005em; }
 .card .card-sub { color: var(--text-muted); font-size: 12.5px; margin-top: 2px; }
 .card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
 
