@@ -145,6 +145,24 @@ header.top .sub { color: var(--text-secondary); margin-top: 4px; font-size: 13.5
 .date-menu button[aria-current="true"] { color: var(--accent); font-weight: 600; }
 .date-menu button:disabled { color: var(--text-muted); cursor: not-allowed; }
 .date-menu .soon { font-size: 10px; color: var(--text-muted); }
+.date-menu { min-width: 240px; }
+.date-custom { padding: 8px 10px 4px; display: flex; flex-direction: column; gap: 8px; }
+.date-custom label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--text-secondary); }
+.date-custom input[type="date"] {
+  font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text-primary);
+}
+.date-apply {
+  align-self: flex-start; background: var(--accent); color: #fff; border-radius: 6px;
+  padding: 6px 12px; font-size: 12.5px; font-weight: 600;
+}
+.date-menu-note { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
+.date-menu-divider { height: 1px; background: var(--border); margin: 6px 4px; }
+.date-compare-row {
+  display: flex; align-items: center; gap: 8px; padding: 8px 10px; font-size: 13px;
+  color: var(--text-secondary); cursor: pointer;
+}
+.date-compare-row:hover { color: var(--text-primary); }
 
 .toggle-chip {
   border: 1px solid var(--border); background: var(--surface); border-radius: 999px;

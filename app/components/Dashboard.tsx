@@ -93,6 +93,17 @@ const H = 230;
 const plotW = W - M.l - M.r;
 const plotH = H - M.t - M.b;
 
+type DatePreset = "today" | "yesterday" | "7d" | "14d" | "28d" | "month" | "lastmonth" | "custom";
+const DATE_PRESETS: { key: DatePreset; label: string }[] = [
+  { key: "today", label: "Hoy" },
+  { key: "yesterday", label: "Ayer" },
+  { key: "7d", label: "Últimos 7 días" },
+  { key: "14d", label: "Últimos 14 días" },
+  { key: "28d", label: "Últimos 28 días" },
+  { key: "month", label: "Este mes" },
+  { key: "lastmonth", label: "Mes anterior" },
+];
+
 type SortKey = "pacing" | "objetivo" | "real" | "delta";
 interface SortState {
   key: SortKey;
@@ -129,10 +140,25 @@ export default function Dashboard() {
   const [chartOpen, setChartOpen] = useState(false);
   const [compareOn, setCompareOn] = useState(false);
   const [dateMenuOpen, setDateMenuOpen] = useState(false);
+  const [datePreset, setDatePreset] = useState<DatePreset>("month");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
   const [bannerOpen, setBannerOpen] = useState(false);
   const [sort, setSort] = useState<SortState>({ key: "delta", dir: "desc" });
   const [tooltip, setTooltip] = useState<{ x: number; y: number; day: number } | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+  const dateMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!dateMenuOpen) return;
+    function onClickOutside(e: MouseEvent) {
+      if (dateMenuRef.current && !dateMenuRef.current.contains(e.target as Node)) {
+        setDateMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [dateMenuOpen]);
 
   useEffect(() => {
     fetch("/api/spend")
@@ -264,6 +290,13 @@ export default function Dashboard() {
     if (sort.key !== key) return <span className="sort-ico">⇅</span>;
     return <span className="sort-ico active">{sort.dir === "desc" ? "▼" : "▲"}</span>;
   }
+  function dateRangeLabel(): string {
+    if (datePreset === "custom") {
+      if (customFrom && customTo) return `${customFrom} → ${customTo}`;
+      return "Personalizado";
+    }
+    return DATE_PRESETS.find((d) => d.key === datePreset)?.label ?? "Este mes";
+  }
   function prevLabel(p?: number): string {
     if (p === undefined) return "—";
     if (p > 0) return `▲ +${p}%`;
@@ -337,30 +370,57 @@ export default function Dashboard() {
 
       <div className="controls-row">
         <div className="controls-left">
-          <div className="dropdown-wrap">
+          <div className="dropdown-wrap" ref={dateMenuRef}>
             <button className="chip" aria-expanded={dateMenuOpen} onClick={() => setDateMenuOpen((v) => !v)}>
-              📅 Mes en curso <span style={{ fontSize: 10 }}>▾</span>
+              📅 {dateRangeLabel()} <span style={{ fontSize: 10 }}>▾</span>
             </button>
             {dateMenuOpen && (
               <div className="date-menu" role="menu">
-                <button role="menuitem" aria-current="true" onClick={() => setDateMenuOpen(false)}>
-                  Mes en curso
+                {DATE_PRESETS.map((d) => (
+                  <button
+                    key={d.key}
+                    role="menuitem"
+                    aria-current={datePreset === d.key}
+                    disabled={d.key !== "month"}
+                    title={d.key !== "month" ? "Todavía sin datos históricos reales conectados" : undefined}
+                    onClick={() => {
+                      setDatePreset(d.key);
+                      setDateMenuOpen(false);
+                    }}
+                  >
+                    {d.label}
+                    {d.key !== "month" && <span className="soon">pronto</span>}
+                  </button>
+                ))}
+                <button role="menuitem" aria-current={datePreset === "custom"} onClick={() => setDatePreset("custom")}>
+                  Personalizado <span style={{ fontSize: 10 }}>{datePreset === "custom" ? "▴" : "▸"}</span>
                 </button>
-                <button role="menuitem" disabled title="Todavía no disponible">
-                  Últimos 7 días <span className="soon">pronto</span>
-                </button>
-                <button role="menuitem" disabled title="Todavía no disponible">
-                  Mes anterior <span className="soon">pronto</span>
-                </button>
+                {datePreset === "custom" && (
+                  <div className="date-custom">
+                    <label>
+                      Desde
+                      <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
+                    </label>
+                    <label>
+                      Hasta
+                      <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
+                    </label>
+                    <button className="date-apply" onClick={() => setDateMenuOpen(false)}>
+                      Aplicar
+                    </button>
+                    <div className="date-menu-note">
+                      El rango se guarda, pero todavía no hay histórico real conectado — sigue mostrando "Este mes".
+                    </div>
+                  </div>
+                )}
+                <div className="date-menu-divider" />
+                <label className="date-compare-row">
+                  <input type="checkbox" checked={compareOn} onChange={() => setCompareOn((v) => !v)} />
+                  Comparar con el período anterior
+                </label>
               </div>
             )}
           </div>
-          <button className="toggle-chip" aria-pressed={compareOn} onClick={() => setCompareOn((v) => !v)}>
-            <span className="toggle-track">
-              <span className="toggle-knob" />
-            </span>
-            Comparar vs. período anterior
-          </button>
           <div className="stat-chip">
             <span className="stat-label">Total presupuesto</span>
             <span className="stat-value num">{fmtCompact(totalBudgetEnabled)}</span>
