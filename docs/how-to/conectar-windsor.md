@@ -32,7 +32,12 @@ Esas cuentas reales todavía no tienen presupuesto/objetivo cargado (no hay medi
 - Deberías ver una fila nueva por cada cuenta real conectada en Windsor.ai, con su nombre real.
 - Si algo falla, vas a ver un banner de advertencia amarillo con el mensaje de error específico (la app cae a mock, no se rompe entera).
 
-**El CPL real es siempre el que devuelve Windsor.ai, $0 incluido — sin excepción y sin fallback a mock ni avisos por cada cero.** Es `spend / conversiones`; si la cuenta tuvo $0 de gasto o 0 conversiones en el mes (por ejemplo, campañas pausadas), se muestra `0`, tal cual. Un dato real en cero es un dato real, no un error.
+**El dato real es siempre el que devuelve Windsor.ai, $0 incluido — sin excepción y sin fallback a mock ni avisos por cada cero.** La columna "Real" muestra dos cosas distintas según el tipo de fila, y ambas son intencionales:
+
+- **Cuenta real nueva (sin mapeo, la mayoría):** muestra el **gasto total** de la cuenta — coincide directo con el "Costo" que ves en Google Ads. La columna "Plataforma" lo aclara con `(Gasto)` al lado.
+- **Cliente mock con cuenta mapeada vía `WINDSOR_GOOGLE_ADS_ACCOUNT_MAP`:** muestra el **CPL** (`spend / conversiones`) — porque ese cliente ya tiene un objetivo de CPL cargado (del media plan mock) contra el cual comparar.
+
+No las confundas: $457.653 de gasto total y $5.637 de costo por conversión pueden ser, los dos, el número "correcto" de la misma cuenta — depende de qué pregunta estás haciendo.
 
 ## Si algo no funciona
 

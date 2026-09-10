@@ -160,8 +160,12 @@ export async function fetchWindsorSpend(
       budget: 0, // sin media plan cargado todavía — no se inventa un objetivo
       spend8: t.spend,
       mix: { google: 100 },
+      // Sin media plan todavía no hay CPL objetivo que comparar — se
+      // muestra el gasto total de la cuenta, que es lo que coincide
+      // directo con lo que se ve en Google Ads (a diferencia del costo
+      // por conversión, que es otra métrica).
       cpl: {
-        google: { target: 0, real: t.conversions > 0 ? t.spend / t.conversions : 0, label: "CPL" },
+        google: { target: 0, real: t.spend, label: "Gasto" },
       },
       health: [],
     }));
