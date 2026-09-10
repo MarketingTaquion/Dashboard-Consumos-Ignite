@@ -142,27 +142,21 @@ export async function fetchWindsorSpend(
       return c;
     }
 
+    // Siempre el valor real, tal cual lo devuelve Windsor.ai — $0 incluido.
+    // Nada de mantener el mock "por las dudas" ni avisos por cada cero: un
+    // 0 real es un dato válido (ej. campaña pausada), no un error.
     const spend = spendByAccount.get(accountId)!;
     const conversions = conversionsByAccount.get(accountId) || 0;
-    const next: ClientData = { ...c, spend8: spend };
+    const cpl = c.cpl.google;
 
-    // El CPL real (spend / conversiones) es lo que se ve en la tabla de
-    // "Ritmo de consumo" — sin esto, spend8 se actualiza pero la tabla que
-    // Ignite realmente lee sigue mostrando el mock, sin ningún aviso.
-    if (conversions > 0) {
-      const cpl = c.cpl.google;
-      next.cpl = { ...c.cpl, google: { ...cpl, target: cpl?.target ?? 0, real: spend / conversions } };
-    } else {
-      // Gasto $0 o sin conversiones este mes (ej. campañas pausadas): no hay
-      // CPL real que calcular. Mejor avisar explícitamente que fabricar un
-      // número — es justo el caso que specs/003 pide evitar ("nunca un dato
-      // engañoso o vacío sin explicación").
-      warnings.push(
-        `Windsor.ai: la cuenta "${accountId}" (cliente "${c.name}") tuvo $${spend} de gasto y 0 conversiones este mes — se mantiene el CPL de ejemplo en la tabla hasta que haya conversiones reales que promediar.`
-      );
-    }
-
-    return next;
+    return {
+      ...c,
+      spend8: spend,
+      cpl: {
+        ...c.cpl,
+        google: { ...cpl, target: cpl?.target ?? 0, real: conversions > 0 ? spend / conversions : 0 },
+      },
+    };
   });
 
   return { clients: updated, warnings };

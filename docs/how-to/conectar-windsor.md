@@ -31,7 +31,7 @@ Esta es la vía **prioritaria** sobre la integración directa a Google Ads API (
 - El pie de página debería decir "Google Ads vía Windsor.ai (en vivo)".
 - Si algo falla, vas a ver un banner de advertencia amarillo con el mensaje de error específico (la app cae a mock, no se rompe entera).
 
-**Ojo: que el banner diga "conectado" no significa que toda la tabla ya es real.** `spend8` (el acumulado usado en pacing y en los chips de arriba) se actualiza siempre que la cuenta aparezca en la respuesta. El **CPL real** de la tabla de "Ritmo de consumo" (columna "Real") es `spend / conversiones` — si la cuenta tuvo $0 de gasto o 0 conversiones en el mes (por ejemplo, campañas pausadas), no hay CPL que calcular, y esa fila **se queda con el valor de ejemplo** con un warning explicándolo, en vez de mostrar un número fabricado. Es el comportamiento esperado, no un bug — para ver un CPL real hace falta una cuenta con conversiones reales en el mes.
+**Tanto `spend8` (pacing, chips de arriba) como el CPL de la tabla ("Real") se actualizan siempre que la cuenta aparezca en la respuesta — sin excepción y sin fallback a mock.** El CPL real es `spend / conversiones`; si la cuenta tuvo $0 de gasto o 0 conversiones en el mes (por ejemplo, campañas pausadas), el CPL real se muestra como `0`, tal cual. Es una decisión deliberada: un cliente conectado siempre muestra su dato real, incluido el cero — nunca un valor de ejemplo disfrazado de real. El mock solo aparece para clientes que **no** tienen cuenta mapeada en `WINDSOR_GOOGLE_ADS_ACCOUNT_MAP`.
 
 ## Si algo no funciona
 
