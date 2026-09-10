@@ -29,6 +29,10 @@ function fmtFull(n: number): string {
 type Status = { key: "good" | "warning" | "critical"; label: string; ratio: number };
 
 function statusFor(c: ClientData, today: number, daysInMonth: number): Status {
+  // Sin presupuesto cargado (ej. cuenta real de Windsor sin media plan
+  // todavía) no hay pacing que calcular — no fabricar un "sobre-ritmo" por
+  // dividir por 0. Ver docs/explanation/estado-y-limitaciones.md.
+  if (c.budget === 0) return { key: "good", label: "Sin objetivo cargado", ratio: 0 };
   const flat = c.spend8 / today;
   const projected = c.spend8 + flat * (daysInMonth - today);
   const ratio = projected / c.budget;
@@ -250,7 +254,9 @@ export default function Dashboard() {
       if (!enabled[p.key]) return;
       const e = c.cpl[p.key];
       if (!e) return;
-      const deltaPct = Math.round(((e.real - e.target) / e.target) * 1000) / 10;
+      // target 0 = sin objetivo cargado (cuenta real sin media plan) — no
+      // dividir por 0.
+      const deltaPct = e.target === 0 ? 0 : Math.round(((e.real - e.target) / e.target) * 1000) / 10;
       rows.push({
         clientKey: c.key,
         clientName: c.name,

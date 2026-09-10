@@ -23,8 +23,8 @@ Ver [cómo conectar Windsor.ai](../how-to/conectar-windsor.md) para el paso a pa
 
 | Variable | Obligatoria si usás Windsor.ai | Descripción |
 |---|---|---|
-| `WINDSOR_API_KEY` | Sí | API key simple (no OAuth) — Windsor.ai UI → Account → API Key. Ya cargada en Vercel (Production/Preview/Development) desde `marketing@taquion.com.ar`; para desarrollo local copiala también a `.env.local`. Si está presente, tiene prioridad sobre las variables de Google Ads directo. |
-| `WINDSOR_GOOGLE_ADS_ACCOUNT_MAP` | En la práctica sí | Mapeo `cliente_interno:account_id`, separado por comas, con el `account_id`/`account_name` tal como aparece en Windsor.ai. Sin esto, `/api/spend` usa Windsor.ai pero no sabe a qué cliente asignarle cada cuenta — todos siguen mostrando mock. Ejemplo: `norte:1234567890,andes:2345678901`. |
+| `WINDSOR_API_KEY` | Sí | API key simple (no OAuth) — Windsor.ai UI → Account → API Key. Ya cargada en Vercel (Production/Preview/Development) desde `marketing@taquion.com.ar`; para desarrollo local copiala también a `.env.local`. Si está presente, tiene prioridad sobre las variables de Google Ads directo. Con solo esta variable, ya se traen **todas** las cuentas de Google Ads conectadas en Windsor.ai como filas propias. |
+| `WINDSOR_GOOGLE_ADS_ACCOUNT_MAP` | No — opcional | Solo para pisar el spend de un cliente mock puntual con una cuenta real específica (`cliente_interno:account_id`, separado por comas). Sin esto, cada cuenta real igual aparece en la tabla, como fila nueva con su nombre real. Ejemplo: `norte:1234567890`. |
 
 Implementado en [`lib/windsor.ts`](../../lib/windsor.ts) — ver la nota al principio del archivo sobre qué está verificado contra la documentación pública de Windsor.ai y qué está asumido sin probar contra una cuenta real.
 

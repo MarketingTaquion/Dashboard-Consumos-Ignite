@@ -4,12 +4,13 @@ Asume que ya tenés el proyecto corriendo (ver [tutorial de arranque](../tutoria
 
 Esta es la vía **prioritaria** sobre la integración directa a Google Ads API (`lib/googleAds.ts` / [conectar Google Ads API](./conectar-google-ads.md)) — ver [Decisión de arquitectura de datos](../explanation/arquitectura-de-datos.md). Si `WINDSOR_API_KEY` está presente, `/api/spend` ni siquiera llega a mirar las credenciales de Google Ads directo.
 
-## Por qué hace falta más que la API key
+## No hace falta mapear nada de antemano
 
-`WINDSOR_API_KEY` alcanza para que Windsor.ai te devuelva datos — pero no alcanza para que el dashboard sepa **a qué cliente interno corresponde cada cuenta real**. Los 4 "clientes" del mock (Norte Fintech, Andes Turismo, Terra Realty, MetroVoz) son ficticios; las cuentas reales conectadas en Windsor.ai son cuentas propias de Taquión. Hasta que exista ese mapeo real cliente↔cuenta (ver [estado y limitaciones](../explanation/estado-y-limitaciones.md)), tenés dos opciones:
+Con solo `WINDSOR_API_KEY`, `/api/spend` trae **todas** las cuentas de Google Ads que Windsor.ai tenga conectadas y las agrega a la tabla como filas propias — nombre real de la cuenta, gasto real, $0 incluido si corresponde. Los 4 clientes mock (Norte Fintech, Andes Turismo, Terra Realty, MetroVoz) se mantienen sin tocar, como referencia/demo; las cuentas reales aparecen a continuación, identificadas por su nombre real (no por un cliente ficticio).
 
-- Mapear cada cliente ficticio a una cuenta real solo para validar que la integración funciona end-to-end (los números van a mezclar clientes ficticios con gasto real de Taquión — sirve para probar el cableado, no para leer el dashboard como si fuera cierto).
-- Esperar a que exista el mapeo real antes de cargar `WINDSOR_GOOGLE_ADS_ACCOUNT_MAP` en producción.
+Esas cuentas reales todavía no tienen presupuesto/objetivo cargado (no hay media plan asociado) — el "Objetivo" sale en `$0` y el estado en "Sin objetivo cargado" hasta que exista ese dato (ver [estado y limitaciones](../explanation/estado-y-limitaciones.md)).
+
+`WINDSOR_GOOGLE_ADS_ACCOUNT_MAP` queda como mecanismo **opcional** para el caso contrario: si ya sabés que una cuenta real corresponde a uno de los clientes mock, podés pisar el spend de ese cliente puntual en vez de que aparezca como fila nueva (`cliente_interno:account_id`, ver [referencia de variables de entorno](../reference/variables-de-entorno.md)).
 
 ## Pasos
 
@@ -18,20 +19,20 @@ Esta es la vía **prioritaria** sobre la integración directa a Google Ads API (
    cp .env.example .env.local
    ```
 2. Completá `WINDSOR_API_KEY` (Windsor.ai UI → Account → API Key). En producción ya está cargada en Vercel desde `marketing@taquion.com.ar` — para desarrollo local, copiala también a `.env.local`.
-3. Completá `WINDSOR_GOOGLE_ADS_ACCOUNT_MAP` con el mapeo `cliente_interno:account_id` (el `account_id` o `account_name` tal como aparece en Windsor.ai — ver [referencia de variables de entorno](../reference/variables-de-entorno.md)).
-4. Reiniciá el servidor de desarrollo:
+3. Reiniciá el servidor de desarrollo:
    ```bash
    npm run dev
    ```
-5. Si `WINDSOR_API_KEY` está presente, `/api/spend` va a intentar Windsor.ai. Sin `WINDSOR_GOOGLE_ADS_ACCOUNT_MAP`, va a devolver un warning y seguir mostrando mock para todos los clientes — no hay forma de "romper" el dashboard por configuración incompleta.
+4. Listo — no hace falta ningún otro paso. `WINDSOR_GOOGLE_ADS_ACCOUNT_MAP` es opcional (ver arriba).
 
 ## Verificar que funcionó
 
 - El banner superior debería cambiar de "Datos de ejemplo" a "Google Ads conectado vía Windsor.ai".
 - El pie de página debería decir "Google Ads vía Windsor.ai (en vivo)".
+- Deberías ver una fila nueva por cada cuenta real conectada en Windsor.ai, con su nombre real.
 - Si algo falla, vas a ver un banner de advertencia amarillo con el mensaje de error específico (la app cae a mock, no se rompe entera).
 
-**Tanto `spend8` (pacing, chips de arriba) como el CPL de la tabla ("Real") se actualizan siempre que la cuenta aparezca en la respuesta — sin excepción y sin fallback a mock.** El CPL real es `spend / conversiones`; si la cuenta tuvo $0 de gasto o 0 conversiones en el mes (por ejemplo, campañas pausadas), el CPL real se muestra como `0`, tal cual. Es una decisión deliberada: un cliente conectado siempre muestra su dato real, incluido el cero — nunca un valor de ejemplo disfrazado de real. El mock solo aparece para clientes que **no** tienen cuenta mapeada en `WINDSOR_GOOGLE_ADS_ACCOUNT_MAP`.
+**El CPL real es siempre el que devuelve Windsor.ai, $0 incluido — sin excepción y sin fallback a mock ni avisos por cada cero.** Es `spend / conversiones`; si la cuenta tuvo $0 de gasto o 0 conversiones en el mes (por ejemplo, campañas pausadas), se muestra `0`, tal cual. Un dato real en cero es un dato real, no un error.
 
 ## Si algo no funciona
 

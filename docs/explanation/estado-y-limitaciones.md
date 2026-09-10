@@ -2,6 +2,10 @@
 
 Este documento explica **por qué** el proyecto está donde está — para la lista accionable de tareas pendientes en formato checklist, ver la sección "Qué falta" en el [README](../../README.md). Acá se documenta el razonamiento y el contexto detrás de cada limitación, no solo el hecho de que existe.
 
+## Las cuentas reales de Windsor.ai aparecen sin objetivo/presupuesto
+
+`lib/windsor.ts` trae todas las cuentas de Google Ads conectadas en Windsor.ai y las agrega a la tabla con su nombre y gasto reales — pero sin un media plan cargado, no hay `budget`/`target` que asignarles. Esas filas muestran `$0` de objetivo y el estado "Sin objetivo cargado" (ver `statusFor` en `Dashboard.tsx`) en vez de un pacing fabricado. Cuando exista una fuente estructurada de targets por cuenta (pregunta abierta en `specs/003-dashboard-consumos.md`), esto se reemplaza por el objetivo real.
+
 ## Todos los clientes del dashboard son ficticios
 
 Norte Fintech, Andes Turismo, Terra Realty y MetroVoz (ver [`lib/mockData.ts`](../../lib/mockData.ts)) **no son clientes reales de Taquión** — se inventaron para tener un dataset representativo mientras se definía el diseño del producto. Esto importa porque las cuentas reales conectadas en Windsor.ai hoy (`Taquion`, `Taquion-AdAccountTTK`, `Taquion0126` en TikTok Ads) son **cuentas propias de Taquión**, no de sus clientes. Todavía no existe un mapeo entre "cliente interno de este dashboard" y "cuenta real en una plataforma publicitaria" — ese mapeo es un prerrequisito antes de que cualquier integración real (Google Ads, Windsor.ai) muestre datos que reflejen clientes de verdad.
