@@ -12,7 +12,17 @@ import type { ClientData } from "./types";
  *
  * Verificado contra una cuenta real (2026-09-10): el connector "google_ads",
  * los campos account_id/account_name/spend/conversions y la forma de
- * respuesta `{ data: [...] }` funcionan tal cual estaban asumidos acá.
+ * respuesta `{ data: [...] }` funcionan tal cual estaban asumidos acá. El
+ * endpoint de cuentas conectadas (onboard.windsor.ai/api/common/ds-accounts)
+ * también quedó verificado: encontró cuentas sin ningún dato de performance
+ * (FRONERI, sin campañas creadas) que los otros dos intentos no podían ver.
+ *
+ * Descubrimiento de cuentas en 3 capas, cada una cubre lo que la anterior
+ * no puede: (1) mes en curso, con spend/conversiones reales; (2) últimos 12
+ * meses, solo para encontrar cuentas con actividad vieja pero nada este mes;
+ * (3) endpoint de cuentas conectadas, para las que nunca tuvieron ni un
+ * evento. Las capas 2 y 3 solo aportan el nombre — spend/conversiones
+ * quedan en 0 si no aparecieron en la capa 1.
  *
  * ENFOQUE: no requiere mapear cliente↔cuenta de antemano. Trae **todas**
  * las cuentas de Google Ads que Windsor.ai tenga conectadas y las devuelve
@@ -144,12 +154,13 @@ export async function fetchWindsorSpend(
   }
 
   // Cuentas que NUNCA tuvieron ni un solo evento (ej. sin campañas creadas
-  // todavía): ni el mes en curso ni el último año de datos las va a
-  // encontrar, porque no hay ninguna fila de performance que las mencione.
-  // Para esas hace falta el endpoint de CUENTAS CONECTADAS de Windsor.ai
-  // (metadata, no datos de campaña) — no confirmado contra una respuesta
-  // real todavía, así que se intenta como mejor esfuerzo: si falla o
-  // devuelve algo con forma inesperada, no rompe nada, solo no suma cuentas
+  // todavía, como FRONERI): ni el mes en curso ni el último año de datos
+  // las va a encontrar, porque no hay ninguna fila de performance que las
+  // mencione. Para esas hace falta el endpoint de CUENTAS CONECTADAS de
+  // Windsor.ai (metadata, no datos de campaña) — verificado 2026-09-10
+  // contra la cuenta real de Taquión (encontró TQN-LC y FRONERI, ambas sin
+  // datos de performance). Se mantiene el try/catch de mejor esfuerzo: si
+  // algún día cambia de forma o falla, no rompe nada, solo no suma cuentas
   // nuevas acá (quedan las que ya se encontraron por datos).
   try {
     const url = `https://onboard.windsor.ai/api/common/ds-accounts?datasource=${connector}&api_key=${process.env.WINDSOR_API_KEY}`;

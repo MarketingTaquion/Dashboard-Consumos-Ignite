@@ -6,7 +6,13 @@ Esta es la vía **prioritaria** sobre la integración directa a Google Ads API (
 
 ## No hace falta mapear nada de antemano
 
-Con solo `WINDSOR_API_KEY`, `/api/spend` trae **todas** las cuentas de Google Ads que Windsor.ai tenga conectadas y las muestra como filas propias — incluidas las que no tuvieron actividad este mes (`lib/windsor.ts` hace una segunda consulta de los últimos 12 meses solo para descubrir esas cuentas "silenciosas"; Windsor no manda una fila con spend $0, directamente omite la cuenta si no tuvo ningún evento en el rango pedido) — nombre real de la cuenta, gasto real, $0 incluido si corresponde. **En cuanto hay al menos una cuenta real, los 4 clientes mock (Norte Fintech, Andes Turismo, Terra Realty, MetroVoz) desaparecen de la vista** — dejan de aportar una vez que hay datos reales. Si Windsor no tiene ninguna cuenta conectada (o falla la consulta), se sigue mostrando el mock completo, para que la tabla nunca quede vacía.
+Con solo `WINDSOR_API_KEY`, `/api/spend` trae **todas** las cuentas de Google Ads que Windsor.ai tenga conectadas y las muestra como filas propias — nombre real, gasto real, $0 incluido si corresponde. `lib/windsor.ts` las descubre en 3 capas, cada una cubre lo que la anterior no puede ver:
+
+1. **Mes en curso** — spend y conversiones reales.
+2. **Últimos 12 meses** — encuentra cuentas con actividad vieja pero nada este mes (Windsor no manda una fila con spend $0, directamente omite la cuenta si no tuvo ningún evento en el rango pedido).
+3. **Endpoint de cuentas conectadas** de Windsor.ai — encuentra cuentas que nunca tuvieron ni un solo evento (ej. sin campañas creadas todavía).
+
+Las capas 2 y 3 solo aportan el nombre de la cuenta; si no tuvo actividad este mes, el gasto queda en $0. **En cuanto hay al menos una cuenta real, los 4 clientes mock (Norte Fintech, Andes Turismo, Terra Realty, MetroVoz) desaparecen de la vista** — dejan de aportar una vez que hay datos reales. Si Windsor no tiene ninguna cuenta conectada (o falla la consulta), se sigue mostrando el mock completo, para que la tabla nunca quede vacía.
 
 Esas cuentas reales todavía no tienen presupuesto/objetivo cargado (no hay media plan asociado) — el "Objetivo" sale en `$0` y el estado en "Sin objetivo cargado" hasta que exista ese dato (ver [estado y limitaciones](../explanation/estado-y-limitaciones.md)).
 
@@ -41,10 +47,11 @@ No las confundas: $457.653 de gasto total y $5.637 de costo por conversión pued
 
 ## Si algo no funciona
 
-Revisá [`lib/windsor.ts`](../../lib/windsor.ts) — el archivo tiene una nota al principio con todo lo que está **asumido pero no verificado contra una respuesta real** (nombre del connector, nombres de campo de cuenta, forma exacta del JSON). Si `spendByAccount` queda vacío pese a que la consulta trae filas, es la primera sospecha: los nombres de campo de Windsor.ai no son los que asume el código. Confirmalos contra [windsor.ai/data-field/all/](https://windsor.ai/data-field/all/) filtrando por Google Ads, o inspeccionando una respuesta real de:
+Las 3 capas de descubrimiento (mes en curso, 12 meses, endpoint de cuentas conectadas) ya están verificadas contra la cuenta real de Taquión (2026-09-10) — ver la nota al principio de [`lib/windsor.ts`](../../lib/windsor.ts). Si de todas formas una cuenta no aparece, revisá el banner de warning: cada una de las 3 capas avisa explícitamente si falla, en vez de fallar en silencio. Para inspeccionar una respuesta real a mano:
 
 ```
 https://connectors.windsor.ai/google_ads?api_key=TU_KEY&fields=account_id,account_name,date,spend&date_from=2026-09-01&date_to=2026-09-10
+https://onboard.windsor.ai/api/common/ds-accounts?datasource=google_ads&api_key=TU_KEY
 ```
 
 ## Después de Google Ads: TikTok, Meta, LinkedIn
