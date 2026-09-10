@@ -353,9 +353,9 @@ export default function Dashboard() {
           <>
             <span className="tq-arrow">↘</span>{" "}
             <span>
-              <b>Datos de ejemplo.</b> MVP real en curso: Google Ads + Meta Ads vía Windsor.ai (ver{" "}
-              <code>specs/003-dashboard-consumos.md</code>). TikTok Ads y LinkedIn Ads todavía no están conectados —
-              los 4 siguen siendo mock hasta que se resuelva.
+              <b>Datos de ejemplo.</b> MVP real en curso: Google Ads + Meta Ads + TikTok Ads vía Windsor.ai (ver{" "}
+              <code>specs/003-dashboard-consumos.md</code>). LinkedIn Ads todavía no está conectado — los 4 siguen
+              siendo mock hasta que se resuelva.
             </span>
           </>
         ) : (
@@ -741,7 +741,7 @@ export default function Dashboard() {
             : data.source === "google-ads"
             ? "Google Ads API directo (en vivo)"
             : "mock"}
-          {" "}· MVP real en curso: Google Ads + Meta Ads vía Windsor.ai · TikTok Ads y LinkedIn Ads: mock
+          {" "}· MVP real en curso: Google Ads + Meta Ads + TikTok Ads vía Windsor.ai · LinkedIn Ads: mock
         </span>
         <span>V2 — sucesor de SDD-TAQUION/mockups/dashboard-consumos.html (V1)</span>
       </footer>
