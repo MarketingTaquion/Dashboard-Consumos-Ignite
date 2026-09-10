@@ -86,7 +86,7 @@ export async function fetchWindsorSpend(
   const now = new Date();
   const params = new URLSearchParams({
     api_key: process.env.WINDSOR_API_KEY!,
-    fields: "account_id,account_name,date,spend",
+    fields: "account_id,account_name,date,spend,conversions",
     date_from: firstDayOfMonth(now),
     date_to: toISODate(now),
   });
@@ -113,13 +113,16 @@ export async function fetchWindsorSpend(
     return { clients: baseClients, warnings };
   }
 
-  // Suma spend por cuenta a lo largo de todo el rango pedido (mes en curso).
+  // Suma spend y conversiones por cuenta a lo largo de todo el rango pedido
+  // (mes en curso). Las conversiones hacen falta para calcular el CPL real
+  // (spend / conversiones) — no alcanza con el spend solo.
   const spendByAccount = new Map<string, number>();
+  const conversionsByAccount = new Map<string, number>();
   for (const row of rows) {
     const acc = String(row.account_id ?? row.account_name ?? "");
     if (!acc) continue;
-    const spend = Number(row.spend ?? 0);
-    spendByAccount.set(acc, (spendByAccount.get(acc) || 0) + spend);
+    spendByAccount.set(acc, (spendByAccount.get(acc) || 0) + Number(row.spend ?? 0));
+    conversionsByAccount.set(acc, (conversionsByAccount.get(acc) || 0) + Number(row.conversions ?? 0));
   }
 
   if (spendByAccount.size === 0 && rows.length > 0) {
@@ -139,7 +142,27 @@ export async function fetchWindsorSpend(
       return c;
     }
 
-    return { ...c, spend8: spendByAccount.get(accountId)! };
+    const spend = spendByAccount.get(accountId)!;
+    const conversions = conversionsByAccount.get(accountId) || 0;
+    const next: ClientData = { ...c, spend8: spend };
+
+    // El CPL real (spend / conversiones) es lo que se ve en la tabla de
+    // "Ritmo de consumo" — sin esto, spend8 se actualiza pero la tabla que
+    // Ignite realmente lee sigue mostrando el mock, sin ningún aviso.
+    if (conversions > 0) {
+      const cpl = c.cpl.google;
+      next.cpl = { ...c.cpl, google: { ...cpl, target: cpl?.target ?? 0, real: spend / conversions } };
+    } else {
+      // Gasto $0 o sin conversiones este mes (ej. campañas pausadas): no hay
+      // CPL real que calcular. Mejor avisar explícitamente que fabricar un
+      // número — es justo el caso que specs/003 pide evitar ("nunca un dato
+      // engañoso o vacío sin explicación").
+      warnings.push(
+        `Windsor.ai: la cuenta "${accountId}" (cliente "${c.name}") tuvo $${spend} de gasto y 0 conversiones este mes — se mantiene el CPL de ejemplo en la tabla hasta que haya conversiones reales que promediar.`
+      );
+    }
+
+    return next;
   });
 
   return { clients: updated, warnings };

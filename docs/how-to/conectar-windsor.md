@@ -31,6 +31,8 @@ Esta es la vía **prioritaria** sobre la integración directa a Google Ads API (
 - El pie de página debería decir "Google Ads vía Windsor.ai (en vivo)".
 - Si algo falla, vas a ver un banner de advertencia amarillo con el mensaje de error específico (la app cae a mock, no se rompe entera).
 
+**Ojo: que el banner diga "conectado" no significa que toda la tabla ya es real.** `spend8` (el acumulado usado en pacing y en los chips de arriba) se actualiza siempre que la cuenta aparezca en la respuesta. El **CPL real** de la tabla de "Ritmo de consumo" (columna "Real") es `spend / conversiones` — si la cuenta tuvo $0 de gasto o 0 conversiones en el mes (por ejemplo, campañas pausadas), no hay CPL que calcular, y esa fila **se queda con el valor de ejemplo** con un warning explicándolo, en vez de mostrar un número fabricado. Es el comportamiento esperado, no un bug — para ver un CPL real hace falta una cuenta con conversiones reales en el mes.
+
 ## Si algo no funciona
 
 Revisá [`lib/windsor.ts`](../../lib/windsor.ts) — el archivo tiene una nota al principio con todo lo que está **asumido pero no verificado contra una respuesta real** (nombre del connector, nombres de campo de cuenta, forma exacta del JSON). Si `spendByAccount` queda vacío pese a que la consulta trae filas, es la primera sospecha: los nombres de campo de Windsor.ai no son los que asume el código. Confirmalos contra [windsor.ai/data-field/all/](https://windsor.ai/data-field/all/) filtrando por Google Ads, o inspeccionando una respuesta real de:
