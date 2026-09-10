@@ -4,18 +4,17 @@ Este documento explica **por qué** el proyecto está donde está — para la li
 
 ## Las cuentas reales de Windsor.ai aparecen sin objetivo/presupuesto
 
-`lib/windsor.ts` trae todas las cuentas de Google Ads conectadas en Windsor.ai y las agrega a la tabla con su nombre y gasto reales — pero sin un media plan cargado, no hay `budget`/`target` que asignarles. Esas filas muestran `$0` de objetivo y el estado "Sin objetivo cargado" (ver `statusFor` en `Dashboard.tsx`) en vez de un pacing fabricado. Cuando exista una fuente estructurada de targets por cuenta (pregunta abierta en `specs/003-dashboard-consumos.md`), esto se reemplaza por el objetivo real.
+`lib/windsor.ts` trae todas las cuentas conectadas en Windsor.ai (Google Ads, Meta Ads, TikTok Ads) y las agrega a la tabla con su nombre y gasto reales — pero sin un media plan cargado, no hay `budget`/`target` que asignarles. Esas filas muestran `$0` de objetivo y el estado "Sin objetivo cargado" (ver `statusFor` en `Dashboard.tsx`) en vez de un pacing fabricado. Cuando exista una fuente estructurada de targets por cuenta (pregunta abierta en `specs/003-dashboard-consumos.md`), esto se reemplaza por el objetivo real.
 
 ## Todos los clientes del dashboard son ficticios
 
-Norte Fintech, Andes Turismo, Terra Realty y MetroVoz (ver [`lib/mockData.ts`](../../lib/mockData.ts)) **no son clientes reales de Taquión** — se inventaron para tener un dataset representativo mientras se definía el diseño del producto. Esto importa porque las cuentas reales conectadas en Windsor.ai hoy (`Taquion`, `Taquion-AdAccountTTK`, `Taquion0126` en TikTok Ads) son **cuentas propias de Taquión**, no de sus clientes. Todavía no existe un mapeo entre "cliente interno de este dashboard" y "cuenta real en una plataforma publicitaria" — ese mapeo es un prerrequisito antes de que cualquier integración real (Google Ads, Windsor.ai) muestre datos que reflejen clientes de verdad.
+Norte Fintech, Andes Turismo, Terra Realty y MetroVoz (ver [`lib/mockData.ts`](../../lib/mockData.ts)) **no son clientes reales de Taquión** — se inventaron para tener un dataset representativo mientras se definía el diseño del producto. En cuanto hay al menos una cuenta real conectada en Windsor.ai (Google Ads, Meta Ads o TikTok Ads), estos 4 desaparecen de la vista y se muestran las cuentas reales en su lugar — pero identificadas por su **nombre real de cuenta** (ej. "Rosbaco & Partners"), no por un cliente de Taquión. Todavía no existe un mapeo entre "cliente interno de Taquión" y "cuenta real en una plataforma publicitaria" — ese mapeo es un prerrequisito antes de que el dashboard muestre datos organizados por cliente de verdad, en vez de por cuenta publicitaria suelta.
 
-## Por qué Meta Ads y LinkedIn Ads siguen siendo mock
+## Por qué LinkedIn Ads sigue siendo mock
 
-- **Meta Ads:** el token de acceso en Windsor.ai está roto (`Credentials 'Jazleidy Lesmes Oñate' is deactivated`) — necesita que alguien con acceso al Business Manager de Facebook lo vuelva a autenticar. No es una limitación de este proyecto, es un problema de la cuenta de Windsor.ai que hay que resolver del lado de la organización.
-- **LinkedIn Ads:** ni siquiera está conectado en Windsor.ai. El plan de Windsor.ai (Basic) limita a 3 fuentes de datos simultáneas — con Facebook y TikTok ya ocupando 2, solo queda 1 lugar libre, que se está usando para Google Ads. Sumar LinkedIn requiere upgradear el plan de Windsor.ai (decisión de costo, no técnica).
+Ni siquiera está conectado en Windsor.ai. El plan de Windsor.ai (Basic) limita a 3 fuentes de datos simultáneas — con Google Ads, Meta Ads y TikTok Ads ya ocupando las 3, no queda ningún lugar libre. Sumar LinkedIn requiere upgradear el plan de Windsor.ai (decisión de costo, no técnica) — ver el detalle de plan y prioridades en `specs/003-dashboard-consumos.md` (`SDD-TAQUION`).
 
-Por esto el MVP real definido es **Google Ads + TikTok Ads** — las otras 2 plataformas del dashboard (Meta, LinkedIn) muestran datos de ejemplo hasta que se resuelvan esos 2 bloqueos externos.
+El MVP real hoy es **Google Ads + Meta Ads + TikTok Ads vía Windsor.ai** — LinkedIn Ads sigue mostrando datos de ejemplo hasta que se resuelva el upgrade de plan.
 
 ## `lib/windsor.ts` reemplazó en prioridad a `lib/googleAds.ts`
 

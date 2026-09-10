@@ -54,6 +54,8 @@ https://connectors.windsor.ai/google_ads?api_key=TU_KEY&fields=account_id,accoun
 https://onboard.windsor.ai/api/common/ds-accounts?datasource=google_ads&api_key=TU_KEY
 ```
 
-## Después de Google Ads: TikTok, Meta, LinkedIn
+## Estado por plataforma
 
-El orden de prioridad confirmado es Google Ads → Meta → TikTok → YouTube → LinkedIn (ver [specs/003-dashboard-consumos.md](../../../specs/003-dashboard-consumos.md) en `SDD-TAQUION`). `lib/windsor.ts` hoy solo pide el connector `google_ads` — para sumar otra plataforma hay que generalizar `fetchWindsorSpend` para mezclar varios connectors (o llamar al connector `all` filtrando por `source`), y sumar el mapeo cliente↔cuenta correspondiente. Meta Ads además tiene el token muerto en Windsor.ai (necesita re-auth del Business Manager) y YouTube/LinkedIn todavía no entran en el plan Basic (3 fuentes, ya llenas) — ver el detalle en la spec.
+El orden de prioridad confirmado es Google Ads → Meta → TikTok → YouTube → LinkedIn (ver [specs/003-dashboard-consumos.md](../../../specs/003-dashboard-consumos.md) en `SDD-TAQUION`). `lib/windsor.ts` ya trae las 3 primeras — cada una es una entrada en `PLATFORM_SOURCES` (`platformKey`, `connector` de Windsor, `label`, su env var de mapeo opcional). Para sumar una plataforma nueva: agregar su entrada ahí (confirmando primero el nombre del connector contra la documentación pública de Windsor, no asumirlo) y, si hace falta, su `WINDSOR_<PLATAFORMA>_ACCOUNT_MAP` en `.env.example`.
+
+YouTube y LinkedIn todavía no entran en el plan Basic de Windsor (3 fuentes, ya llenas con Google Ads + Meta Ads + TikTok Ads) — necesitan un upgrade de plan antes de poder conectarse. Ver el detalle de plan y prioridades en la spec.

@@ -15,12 +15,21 @@ import type { ClientData, PlatformKey } from "./types";
  *   account_id/account_name/spend/conversions, forma `{ data: [...] }`.
  * - **Meta Ads** (2026-09-10): connector "facebook" (así lo nombra Windsor,
  *   no "meta_ads" ni "facebook_ads") — mismos campos y forma de respuesta.
+ * - **TikTok Ads**: connector "tiktok" (confirmado en la documentación
+ *   pública de Windsor). Los campos account_id/account_name están
+ *   confirmados en el field reference de TikTok — "spend" y "conversions"
+ *   NO aparecen ahí con esos nombres exactos (TikTok expone métricas más
+ *   nativas), pero sí son parte del esquema "blended" de Windsor que ya
+ *   funcionó igual para Google/Meta. Sin verificar todavía contra una
+ *   respuesta real: si `spend`/`conversions` vienen vacíos para TikTok pese
+ *   a que la cuenta aparece, es la primera sospecha — revisar
+ *   windsor.ai/data-field/tiktok/ por el nombre nativo del campo de costo.
  * - El endpoint de cuentas conectadas (onboard.windsor.ai/api/common/ds-accounts)
  *   también quedó verificado con Google Ads: encontró cuentas sin ningún dato
  *   de performance (FRONERI, sin campañas creadas) que los otros dos intentos
- *   no podían ver. Se usa igual para Meta, sin verificar todavía contra una
- *   cuenta de Meta sin actividad — si falla para ese connector puntual, cae
- *   al mismo mejor-esfuerzo silencioso que ya tiene cada capa.
+ *   no podían ver. Se usa igual para Meta y TikTok, sin verificar todavía
+ *   contra una cuenta sin actividad de esas dos — si falla para un connector
+ *   puntual, cae al mismo mejor-esfuerzo silencioso que ya tiene cada capa.
  *
  * Descubrimiento de cuentas en 3 capas, por cada plataforma conectada, cada
  * una cubre lo que la anterior no puede: (1) mes en curso, con
@@ -32,19 +41,18 @@ import type { ClientData, PlatformKey } from "./types";
  *
  * ENFOQUE: no requiere mapear cliente↔cuenta de antemano. Trae **todas** las
  * cuentas de cada plataforma conectada en Windsor.ai (hoy: Google Ads, Meta
- * Ads) y las devuelve como filas reales, una por cuenta, usando el nombre
- * real de la cuenta. Si hay al menos una cuenta real, los clientes mock
- * (`baseClients`) se descartan de la vista — ya no aportan una vez que hay
- * datos reales — salvo los que tengan una cuenta real pisándolos
- * explícitamente vía `WINDSOR_GOOGLE_ADS_ACCOUNT_MAP` /
- * `WINDSOR_META_ACCOUNT_MAP` (mecanismo opcional para cuando ya existe ese
- * mapeo de negocio; ver docs/explanation/estado-y-limitaciones.md). Sin
- * ninguna cuenta real conectada, se sigue mostrando el mock completo — la
- * tabla nunca queda vacía.
+ * Ads, TikTok Ads) y las devuelve como filas reales, una por cuenta, usando
+ * el nombre real de la cuenta. Si hay al menos una cuenta real, los clientes
+ * mock (`baseClients`) se descartan de la vista — ya no aportan una vez que
+ * hay datos reales — salvo los que tengan una cuenta real pisándolos
+ * explícitamente vía `WINDSOR_<PLATAFORMA>_ACCOUNT_MAP` (mecanismo opcional
+ * para cuando ya existe ese mapeo de negocio; ver
+ * docs/explanation/estado-y-limitaciones.md). Sin ninguna cuenta real
+ * conectada, se sigue mostrando el mock completo — la tabla nunca queda vacía.
  *
  * Próximas plataformas del orden de prioridad (ver specs/003-dashboard-consumos.md
- * en SDD-TAQUION): TikTok Ads, YouTube, LinkedIn Ads — agregar una entrada
- * más a PLATFORM_SOURCES y (si hace falta mapeo) su propia env var
+ * en SDD-TAQUION): YouTube, LinkedIn Ads — agregar una entrada más a
+ * PLATFORM_SOURCES y (si hace falta mapeo) su propia env var
  * WINDSOR_<PLATAFORMA>_ACCOUNT_MAP.
  *
  * Credenciales (ver .env.example): WINDSOR_API_KEY — la única obligatoria.
@@ -66,6 +74,7 @@ interface PlatformSource {
 const PLATFORM_SOURCES: PlatformSource[] = [
   { platformKey: "google", connector: "google_ads", label: "Google Ads", accountMapEnvVar: "WINDSOR_GOOGLE_ADS_ACCOUNT_MAP" },
   { platformKey: "meta", connector: "facebook", label: "Meta Ads", accountMapEnvVar: "WINDSOR_META_ACCOUNT_MAP" },
+  { platformKey: "tiktok", connector: "tiktok", label: "TikTok Ads", accountMapEnvVar: "WINDSOR_TIKTOK_ACCOUNT_MAP" },
 ];
 
 function parseAccountMap(envVar: string): Record<string, string> {
