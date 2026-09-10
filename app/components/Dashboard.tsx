@@ -335,6 +335,17 @@ export default function Dashboard() {
     return { ...p, spend, budget };
   });
 
+  // Plataformas con al menos una cuenta real (Windsor.ai) en los datos que
+  // llegaron — se arma la etiqueta del banner a partir de esto en vez de
+  // hardcodearla, para que no quede desactualizada cuando se conecte una
+  // plataforma más.
+  const realPlatformKeys = new Set<PlatformKey>();
+  data.clients.forEach((c) => {
+    if (c.key.startsWith("windsor-")) Object.keys(c.mix).forEach((k) => realPlatformKeys.add(k as PlatformKey));
+  });
+  const realPlatformLabels = PLATFORMS.filter((p) => realPlatformKeys.has(p.key)).map((p) => p.label);
+  const pendingPlatformLabels = PLATFORMS.filter((p) => !realPlatformKeys.has(p.key)).map((p) => p.label);
+
   return (
     <div className="wrap">
       <div className={"mock-note" + (data.source !== "mock" ? " real" : "")}>
@@ -342,17 +353,19 @@ export default function Dashboard() {
           <>
             <span className="tq-arrow">↘</span>{" "}
             <span>
-              <b>Datos de ejemplo.</b> MVP real en curso: Google Ads + TikTok Ads vía Windsor.ai (ver{" "}
-              <code>specs/003-dashboard-consumos.md</code>). Meta Ads tiene el token de Windsor.ai roto y LinkedIn
-              Ads todavía no está conectado — los 4 siguen siendo mock hasta que se resuelva.
+              <b>Datos de ejemplo.</b> MVP real en curso: Google Ads + Meta Ads vía Windsor.ai (ver{" "}
+              <code>specs/003-dashboard-consumos.md</code>). TikTok Ads y LinkedIn Ads todavía no están conectados —
+              los 4 siguen siendo mock hasta que se resuelva.
             </span>
           </>
         ) : (
           <>
             <span className="tq-arrow" style={{ color: "var(--status-good)" }}>↘</span>{" "}
             <span>
-              <b>Google Ads conectado{data.source === "windsor" ? " vía Windsor.ai" : ""}.</b> El resto de las
-              plataformas (Meta, TikTok, LinkedIn) sigue en mock hasta que se integren.
+              <b>
+                {realPlatformLabels.join(" + ") || "Google Ads"} conectado{data.source === "windsor" ? " vía Windsor.ai" : ""}.
+              </b>{" "}
+              {pendingPlatformLabels.length > 0 && <>El resto ({pendingPlatformLabels.join(", ")}) sigue en mock hasta que se integre.</>}
             </span>
           </>
         )}
@@ -723,8 +736,12 @@ export default function Dashboard() {
       <footer className="foot">
         <span>
           Fuente de datos:{" "}
-          {data.source === "windsor" ? "Google Ads vía Windsor.ai (en vivo)" : data.source === "google-ads" ? "Google Ads API directo (en vivo)" : "mock"}
-          {" "}· MVP real en curso: Google Ads + TikTok Ads vía Windsor.ai · Meta Ads y LinkedIn Ads: mock
+          {data.source === "windsor"
+            ? `${realPlatformLabels.join(" + ") || "Google Ads"} vía Windsor.ai (en vivo)`
+            : data.source === "google-ads"
+            ? "Google Ads API directo (en vivo)"
+            : "mock"}
+          {" "}· MVP real en curso: Google Ads + Meta Ads vía Windsor.ai · TikTok Ads y LinkedIn Ads: mock
         </span>
         <span>V2 — sucesor de SDD-TAQUION/mockups/dashboard-consumos.html (V1)</span>
       </footer>
