@@ -29,6 +29,10 @@ function fmtFull(n: number): string {
 type Status = { key: "good" | "warning" | "critical"; label: string; ratio: number };
 
 function statusFor(c: ClientData, today: number, daysInMonth: number): Status {
+  // Sin presupuesto cargado (ej. cuenta real de Windsor sin media plan
+  // todavía) no hay pacing que calcular — no fabricar un "sobre-ritmo" por
+  // dividir por 0. Ver docs/explanation/estado-y-limitaciones.md.
+  if (c.budget === 0) return { key: "good", label: "Sin objetivo cargado", ratio: 0 };
   const flat = c.spend8 / today;
   const projected = c.spend8 + flat * (daysInMonth - today);
   const ratio = projected / c.budget;
@@ -250,7 +254,9 @@ export default function Dashboard() {
       if (!enabled[p.key]) return;
       const e = c.cpl[p.key];
       if (!e) return;
-      const deltaPct = Math.round(((e.real - e.target) / e.target) * 1000) / 10;
+      // target 0 = sin objetivo cargado (cuenta real sin media plan) — no
+      // dividir por 0.
+      const deltaPct = e.target === 0 ? 0 : Math.round(((e.real - e.target) / e.target) * 1000) / 10;
       rows.push({
         clientKey: c.key,
         clientName: c.name,
@@ -331,7 +337,7 @@ export default function Dashboard() {
 
   return (
     <div className="wrap">
-      <div className={"mock-note" + (data.source === "google-ads" ? " real" : "")}>
+      <div className={"mock-note" + (data.source !== "mock" ? " real" : "")}>
         {data.source === "mock" ? (
           <>
             <span className="tq-arrow">↘</span>{" "}
@@ -345,8 +351,8 @@ export default function Dashboard() {
           <>
             <span className="tq-arrow" style={{ color: "var(--status-good)" }}>↘</span>{" "}
             <span>
-              <b>Google Ads conectado.</b> El resto de las plataformas (Meta, LinkedIn) sigue en mock hasta que se
-              integren.
+              <b>Google Ads conectado{data.source === "windsor" ? " vía Windsor.ai" : ""}.</b> El resto de las
+              plataformas (Meta, TikTok, LinkedIn) sigue en mock hasta que se integren.
             </span>
           </>
         )}
@@ -715,7 +721,11 @@ export default function Dashboard() {
       </div>
 
       <footer className="foot">
-        <span>Fuente de datos: {data.source === "google-ads" ? "Google Ads API (en vivo)" : "mock"} · MVP real: Google Ads + TikTok Ads vía Windsor.ai · Meta Ads y LinkedIn Ads: mock</span>
+        <span>
+          Fuente de datos:{" "}
+          {data.source === "windsor" ? "Google Ads vía Windsor.ai (en vivo)" : data.source === "google-ads" ? "Google Ads API directo (en vivo)" : "mock"}
+          {" "}· MVP real en curso: Google Ads + TikTok Ads vía Windsor.ai · Meta Ads y LinkedIn Ads: mock
+        </span>
         <span>V2 — sucesor de SDD-TAQUION/mockups/dashboard-consumos.html (V1)</span>
       </footer>
     </div>

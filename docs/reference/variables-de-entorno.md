@@ -17,13 +17,16 @@ Las 5 variables siguientes tienen que estar **todas** presentes para que `hasGoo
 | `GOOGLE_ADS_CUSTOMER_MAP` | Sí | Mapeo `cliente_interno:customer_id`, separado por comas. Ejemplo: `norte:1234567890,andes:2345678901` |
 | `GOOGLE_ADS_LOGIN_CUSTOMER_ID` | No | Solo si operás con una cuenta MCC/administradora |
 
-## Windsor.ai
+## Windsor.ai (prioridad sobre Google Ads directo)
 
-| Variable | Estado |
-|---|---|
-| `WINDSOR_API_KEY` | Ya cargada en Vercel (Production/Preview/Development) desde la cuenta `marketing@taquion.com.ar`. **No consumida por código todavía** — `lib/googleAds.ts` sigue siendo la integración activa. Ver [Decisión de arquitectura de datos](../explanation/arquitectura-de-datos.md). |
+Ver [cómo conectar Windsor.ai](../how-to/conectar-windsor.md) para el paso a paso.
 
-<!-- TODO(humano): WINDSOR_API_KEY no está listada en .env.example todavía — agregarla ahí (con su comentario explicativo) cuando se empiece a escribir lib/windsor.ts, para que quien clone el repo sepa que existe sin tener que leer esta página. -->
+| Variable | Obligatoria si usás Windsor.ai | Descripción |
+|---|---|---|
+| `WINDSOR_API_KEY` | Sí | API key simple (no OAuth) — Windsor.ai UI → Account → API Key. Ya cargada en Vercel (Production/Preview/Development) desde `marketing@taquion.com.ar`; para desarrollo local copiala también a `.env.local`. Si está presente, tiene prioridad sobre las variables de Google Ads directo. Con solo esta variable, ya se traen **todas** las cuentas de Google Ads conectadas en Windsor.ai como filas propias. |
+| `WINDSOR_GOOGLE_ADS_ACCOUNT_MAP` | No — opcional | Solo para pisar el spend de un cliente mock puntual con una cuenta real específica (`cliente_interno:account_id`, separado por comas). Sin esto, cada cuenta real igual aparece en la tabla, como fila nueva con su nombre real. Ejemplo: `norte:1234567890`. |
+
+Implementado en [`lib/windsor.ts`](../../lib/windsor.ts) — ver la nota al principio del archivo sobre qué está verificado contra la documentación pública de Windsor.ai y qué está asumido sin probar contra una cuenta real.
 
 ## Supabase (planeado, no implementado)
 
