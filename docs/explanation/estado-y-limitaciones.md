@@ -13,11 +13,13 @@ Norte Fintech, Andes Turismo, Terra Realty y MetroVoz (ver [`lib/mockData.ts`](.
 
 Por esto el MVP real definido es **Google Ads + TikTok Ads** — las otras 2 plataformas del dashboard (Meta, LinkedIn) muestran datos de ejemplo hasta que se resuelvan esos 2 bloqueos externos.
 
-## Por qué `lib/googleAds.ts` es un paso intermedio, no el diseño final
+## `lib/windsor.ts` reemplazó en prioridad a `lib/googleAds.ts`
 
-Se implementó una integración directa a Google Ads API (OAuth2 + Developer Token) antes de decidir la arquitectura de datos completa. Una vez que Google Ads esté conectado en Windsor.ai, el plan es que `lib/googleAds.ts` se reemplace por una integración a la API REST de Windsor.ai — mucho más simple (una sola API key, sin flujo OAuth2 propio). Ver [Decisión de arquitectura de datos](./arquitectura-de-datos.md).
+Se había implementado primero una integración directa a Google Ads API (OAuth2 + Developer Token, `lib/googleAds.ts`) antes de decidir la arquitectura de datos completa. Una vez que Google Ads se conectó en Windsor.ai (2026-09-09), se escribió `lib/windsor.ts` contra la API REST de Windsor.ai — mucho más simple (una sola API key, sin flujo OAuth2 propio) — y `app/api/spend/route.ts` la prioriza: si `WINDSOR_API_KEY` está presente, ni siquiera mira las credenciales de Google Ads directo. Ver [Decisión de arquitectura de datos](./arquitectura-de-datos.md) y [cómo conectar Windsor.ai](../how-to/conectar-windsor.md).
 
-Además, `lib/googleAds.ts` se escribió sin poder ejecutarlo contra una cuenta real en el momento de escribirlo (sin Node.js disponible en ese entorno) — quedó documentado explícitamente en el propio archivo que hay que verificarlo contra la versión instalada del paquete `google-ads-api` antes de confiar en él en producción.
+`lib/googleAds.ts` queda en el repo como fallback (por si algún día hace falta consultar Google Ads sin pasar por Windsor.ai), pero no es la vía activa. Sigue teniendo la misma limitación de origen: se escribió sin poder ejecutarlo contra una cuenta real (sin Node.js disponible en ese entorno) — verificar contra la versión instalada del paquete `google-ads-api` antes de confiar en él.
+
+`lib/windsor.ts` tiene la misma limitación por una razón distinta: se escribió contra la documentación **pública** de Windsor.ai, sin una API key real para probar contra una respuesta real en el momento de escribirlo. Los nombres de campo de cuenta (`account_id`/`account_name`) y la forma exacta del JSON de respuesta están documentados como *asumidos, no verificados* en la cabecera del archivo — primera sospecha si el mapeo cliente↔cuenta no encuentra nada pese a que la consulta trae filas.
 
 ## Por qué el "acumulado por día" del gráfico no es un histórico real
 

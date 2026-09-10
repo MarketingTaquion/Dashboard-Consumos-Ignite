@@ -25,7 +25,7 @@ export interface ClientData {
 }
 
 export interface SpendResponse {
-  source: "mock" | "google-ads";
+  source: "mock" | "google-ads" | "windsor";
   today: number; // día del mes actual usado como corte "hoy"
   daysInMonth: number;
   clients: ClientData[];

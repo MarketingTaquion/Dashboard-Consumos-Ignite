@@ -10,8 +10,8 @@ Tipo `SpendResponse` (definido en [`lib/types.ts`](../../lib/types.ts)):
 
 | Campo | Tipo | Descripción |
 |---|---|---|
-| `source` | `"mock" \| "google-ads"` | De dónde salieron los datos. `"mock"` si `hasGoogleAdsCredentials()` devuelve `false`, o si la consulta real falló. |
-| `today` | `number` | Día del mes usado como corte "hoy". En mock siempre `8`; con Google Ads real, `now.getDate()`. |
+| `source` | `"mock" \| "google-ads" \| "windsor"` | De dónde salieron los datos. `"windsor"` si `hasWindsorCredentials()` devuelve `true` (prioridad); si no, `"google-ads"` si `hasGoogleAdsCredentials()` devuelve `true`; si no, `"mock"`. También cae a `"mock"` si la consulta real que corresponda falló. |
+| `today` | `number` | Día del mes usado como corte "hoy". En mock siempre `8`; con datos reales (Windsor o Google Ads directo), `now.getDate()`. |
 | `daysInMonth` | `number` | Días totales del mes en curso. En mock siempre `30`. |
 | `clients` | `ClientData[]` | Ver abajo. |
 | `warnings` | `string[]` \| `undefined` | Presente solo si algo falló parcialmente (ej. Google Ads no respondió para un cliente puntual) — la respuesta sigue siendo 200 igual, el fallback ya ocurrió server-side. |
@@ -76,6 +76,7 @@ Tipo `SpendResponse` (definido en [`lib/types.ts`](../../lib/types.ts)):
 
 `GET /api/spend` **nunca devuelve un error al cliente** por falta o falla de credenciales — ver la lógica completa en [`app/api/spend/route.ts`](../../app/api/spend/route.ts):
 
-1. Si `hasGoogleAdsCredentials()` es `false` → devuelve mock directamente.
-2. Si hay credenciales pero la consulta a Google Ads tira una excepción no controlada → devuelve mock completo, con un `warnings` explicando el error.
-3. Si la consulta funciona pero falla para un cliente puntual → ese cliente devuelve su valor mock, el resto sigue siendo real, y se agrega un warning por cliente afectado.
+1. Si `hasWindsorCredentials()` es `true` → intenta Windsor.ai (`lib/windsor.ts`). Si tira una excepción no controlada, cae a mock completo con un `warnings` explicando el error.
+2. Si no, y `hasGoogleAdsCredentials()` es `true` → intenta Google Ads directo (`lib/googleAds.ts`), con el mismo fallback a mock ante excepción no controlada.
+3. Si ninguna de las dos tiene credenciales → devuelve mock directamente.
+4. Dentro de una consulta que sí funciona, si falla para un cliente puntual (sin mapeo, cuenta no encontrada, etc.) → ese cliente devuelve su valor mock, el resto sigue siendo real, y se agrega un warning por cliente afectado.

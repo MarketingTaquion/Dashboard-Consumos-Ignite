@@ -331,7 +331,7 @@ export default function Dashboard() {
 
   return (
     <div className="wrap">
-      <div className={"mock-note" + (data.source === "google-ads" ? " real" : "")}>
+      <div className={"mock-note" + (data.source !== "mock" ? " real" : "")}>
         {data.source === "mock" ? (
           <>
             <span className="tq-arrow">↘</span>{" "}
@@ -345,8 +345,8 @@ export default function Dashboard() {
           <>
             <span className="tq-arrow" style={{ color: "var(--status-good)" }}>↘</span>{" "}
             <span>
-              <b>Google Ads conectado.</b> El resto de las plataformas (Meta, LinkedIn) sigue en mock hasta que se
-              integren.
+              <b>Google Ads conectado{data.source === "windsor" ? " vía Windsor.ai" : ""}.</b> El resto de las
+              plataformas (Meta, TikTok, LinkedIn) sigue en mock hasta que se integren.
             </span>
           </>
         )}
@@ -715,7 +715,11 @@ export default function Dashboard() {
       </div>
 
       <footer className="foot">
-        <span>Fuente de datos: {data.source === "google-ads" ? "Google Ads API (en vivo)" : "mock"} · MVP real: Google Ads + TikTok Ads vía Windsor.ai · Meta Ads y LinkedIn Ads: mock</span>
+        <span>
+          Fuente de datos:{" "}
+          {data.source === "windsor" ? "Google Ads vía Windsor.ai (en vivo)" : data.source === "google-ads" ? "Google Ads API directo (en vivo)" : "mock"}
+          {" "}· MVP real en curso: Google Ads + TikTok Ads vía Windsor.ai · Meta Ads y LinkedIn Ads: mock
+        </span>
         <span>V2 — sucesor de SDD-TAQUION/mockups/dashboard-consumos.html (V1)</span>
       </footer>
     </div>

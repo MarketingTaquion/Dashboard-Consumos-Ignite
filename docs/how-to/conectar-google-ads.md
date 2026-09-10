@@ -1,6 +1,8 @@
-# Cómo conectar Google Ads API
+# Cómo conectar Google Ads API (directo)
 
-Asume que ya tenés el proyecto corriendo (ver [tutorial de arranque](../tutorials/getting-started.md)) y que necesitás reemplazar los datos de ejemplo por datos reales de Google Ads.
+> ⚠️ **Esta ya no es la vía prioritaria.** Windsor.ai ya está conectado a la cuenta de Google Ads — usá [Cómo conectar Windsor.ai](./conectar-windsor.md) en su lugar. Esta guía queda como referencia del fallback directo (`lib/googleAds.ts`), que solo se usa si `WINDSOR_API_KEY` no está presente.
+
+Asume que ya tenés el proyecto corriendo (ver [tutorial de arranque](../tutorials/getting-started.md)) y que necesitás reemplazar los datos de ejemplo por datos reales de Google Ads sin pasar por Windsor.ai.
 
 ## Antes de empezar: Google Ads API no es una sola API key
 
@@ -37,6 +39,6 @@ A diferencia de otras APIs de Google, necesitás **las 5 variables siguientes**,
 
 Revisá [`lib/googleAds.ts`](../../lib/googleAds.ts) — esa integración se escribió sin poder probarla contra una cuenta real (ver nota al principio del archivo). Si la consulta GAQL falla, comparalo contra la documentación actual del paquete `google-ads-api` instalado en `node_modules/google-ads-api`.
 
-## Plan real: esto va a ser reemplazado por Windsor.ai
+## Ya migrado: usá Windsor.ai
 
-Este integración directa a Google Ads API es un paso intermedio. El plan confirmado es migrar a **Windsor.ai** como capa de ingesta unificada (Google Ads + TikTok Ads como MVP) — ver [Decisión de arquitectura de datos](../explanation/arquitectura-de-datos.md). Si estás por invertir tiempo en depurar `lib/googleAds.ts` a fondo, confirmá primero si esa migración ya está en curso.
+Esta integración directa a Google Ads API fue el paso intermedio antes de que Google Ads se conectara en Windsor.ai. Esa migración **ya se hizo** — ver [Cómo conectar Windsor.ai](./conectar-windsor.md) y [Decisión de arquitectura de datos](../explanation/arquitectura-de-datos.md). `lib/googleAds.ts` sigue en el repo como fallback (si `WINDSOR_API_KEY` no está presente, `/api/spend` cae acá antes de caer a mock), pero no inviertas tiempo depurándolo salvo que ese fallback específico sea lo que estás usando.

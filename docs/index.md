@@ -13,7 +13,8 @@ Esta documentación está organizada según el método **Diátaxis**: cuatro car
 - [Levantar el proyecto por primera vez](./tutorials/getting-started.md)
 
 ## Guías (How-To)
-- [Conectar Google Ads API](./how-to/conectar-google-ads.md)
+- [Conectar Windsor.ai (Google Ads)](./how-to/conectar-windsor.md) — vía prioritaria
+- [Conectar Google Ads API directo](./how-to/conectar-google-ads.md) — fallback, ver nota en la guía
 - [Deployar a Vercel](./how-to/deploy-a-vercel.md)
 - [Agregar una plataforma nueva al dashboard](./how-to/agregar-una-plataforma.md)
 
