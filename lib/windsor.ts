@@ -143,6 +143,47 @@ export async function fetchWindsorSpend(
     );
   }
 
+  // Cuentas que NUNCA tuvieron ni un solo evento (ej. sin campañas creadas
+  // todavía): ni el mes en curso ni el último año de datos las va a
+  // encontrar, porque no hay ninguna fila de performance que las mencione.
+  // Para esas hace falta el endpoint de CUENTAS CONECTADAS de Windsor.ai
+  // (metadata, no datos de campaña) — no confirmado contra una respuesta
+  // real todavía, así que se intenta como mejor esfuerzo: si falla o
+  // devuelve algo con forma inesperada, no rompe nada, solo no suma cuentas
+  // nuevas acá (quedan las que ya se encontraron por datos).
+  try {
+    const url = `https://onboard.windsor.ai/api/common/ds-accounts?datasource=${connector}&api_key=${process.env.WINDSOR_API_KEY}`;
+    const res = await fetch(url, { cache: "no-store" });
+    if (res.ok) {
+      const json = await res.json();
+      const list = Array.isArray(json) ? json : json?.data ?? json?.accounts;
+      if (Array.isArray(list)) {
+        for (const acc of list) {
+          const accountId = String(acc.account_id ?? acc.id ?? "");
+          if (!accountId || byAccount.has(accountId)) continue;
+          byAccount.set(accountId, {
+            accountId,
+            accountName: String(acc.account_name ?? acc.name ?? accountId),
+            spend: 0,
+            conversions: 0,
+          });
+        }
+      } else {
+        warnings.push(
+          `Windsor.ai: el endpoint de cuentas conectadas respondió con una forma inesperada — no se pudieron sumar cuentas sin ningún dato histórico (ej. sin campañas creadas). El resto de las cuentas con datos sigue funcionando normal.`
+        );
+      }
+    } else {
+      warnings.push(
+        `Windsor.ai: el endpoint de cuentas conectadas devolvió HTTP ${res.status} — no se pudieron sumar cuentas sin ningún dato histórico. El resto de las cuentas con datos sigue funcionando normal.`
+      );
+    }
+  } catch (err: any) {
+    warnings.push(
+      `Windsor.ai: no se pudo consultar el endpoint de cuentas conectadas (cuentas sin ningún dato histórico, como una sin campañas creadas, no van a aparecer). Detalle: ${err?.message || err}`
+    );
+  }
+
   if (byAccount.size === 0 && monthRows.length > 0) {
     warnings.push(
       `Windsor.ai (${connector}): la respuesta trajo ${monthRows.length} fila(s) pero ninguna tenía account_id reconocible — revisar nombres de campo contra windsor.ai/data-field/all/.`
