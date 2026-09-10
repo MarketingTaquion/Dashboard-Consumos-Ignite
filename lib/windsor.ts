@@ -74,16 +74,8 @@ export async function fetchWindsorSpend(
   const warnings: string[] = [];
   const accountMap = parseAccountMap(); // opcional — puede quedar vacío
 
-  const now = new Date();
-  const params = new URLSearchParams({
-    api_key: process.env.WINDSOR_API_KEY!,
-    fields: "account_id,account_name,date,spend,conversions",
-    date_from: firstDayOfMonth(now),
-    date_to: toISODate(now),
-  });
-
-  let rows: any[];
-  try {
+  async function fetchRows(dateFrom: string, dateTo: string, fields: string): Promise<any[]> {
+    const params = new URLSearchParams({ api_key: process.env.WINDSOR_API_KEY!, fields, date_from: dateFrom, date_to: dateTo });
     const res = await fetch(`${WINDSOR_BASE_URL}/${connector}?${params.toString()}`, {
       // Nunca cachear: cada request de /api/spend debe reflejar el gasto actual.
       cache: "no-store",
@@ -93,10 +85,21 @@ export async function fetchWindsorSpend(
       throw new Error(`HTTP ${res.status} — ${text.slice(0, 200)}`);
     }
     const json = await res.json();
-    rows = Array.isArray(json) ? json : json?.data;
+    const rows = Array.isArray(json) ? json : json?.data;
     if (!Array.isArray(rows)) {
       throw new Error("Respuesta inesperada de Windsor.ai (ni array ni { data: [...] })");
     }
+    return rows;
+  }
+
+  const now = new Date();
+  const monthStart = firstDayOfMonth(now);
+  const today = toISODate(now);
+  const yearAgo = toISODate(new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()));
+
+  let monthRows: any[];
+  try {
+    monthRows = await fetchRows(monthStart, today, "account_id,account_name,date,spend,conversions");
   } catch (err: any) {
     warnings.push(
       `Windsor.ai (${connector}): falló la consulta, se usó mock para todos los clientes. Detalle: ${err?.message || err}`
@@ -104,11 +107,12 @@ export async function fetchWindsorSpend(
     return { clients: baseClients, warnings };
   }
 
-  // Suma spend y conversiones por cuenta a lo largo de todo el rango pedido
-  // (mes en curso). Las conversiones hacen falta para el CPL real
-  // (spend / conversiones) — no alcanza con el spend solo.
+  // Cuentas con actividad en el mes en curso: Windsor no manda fila para una
+  // cuenta sin ningún evento en el rango pedido (no manda spend "0", omite
+  // la cuenta directamente) — por eso hace falta una segunda consulta más
+  // amplia para descubrir cuentas conectadas que este mes están en $0.
   const byAccount = new Map<string, AccountTotals>();
-  for (const row of rows) {
+  for (const row of monthRows) {
     const accountId = String(row.account_id ?? "");
     if (!accountId) continue;
     const accountName = String(row.account_name ?? accountId);
@@ -118,18 +122,35 @@ export async function fetchWindsorSpend(
     byAccount.set(accountId, prev);
   }
 
-  if (byAccount.size === 0 && rows.length > 0) {
+  // Descubrir cuentas conectadas sin actividad este mes: último año, sin
+  // pedir spend/conversions (más liviano) — solo para saber que existen.
+  // Si esto falla, no es fatal: seguimos solo con lo que trajo el mes.
+  try {
+    const historyRows = await fetchRows(yearAgo, today, "account_id,account_name");
+    for (const row of historyRows) {
+      const accountId = String(row.account_id ?? "");
+      if (!accountId || byAccount.has(accountId)) continue;
+      byAccount.set(accountId, {
+        accountId,
+        accountName: String(row.account_name ?? accountId),
+        spend: 0,
+        conversions: 0,
+      });
+    }
+  } catch (err: any) {
     warnings.push(
-      `Windsor.ai (${connector}): la respuesta trajo ${rows.length} fila(s) pero ninguna tenía account_id reconocible — revisar nombres de campo contra windsor.ai/data-field/all/.`
+      `Windsor.ai (${connector}): no se pudo consultar el histórico para descubrir cuentas sin actividad este mes (se muestran solo las que sí tuvieron datos). Detalle: ${err?.message || err}`
     );
   }
-  if (byAccount.size === 0 && rows.length === 0) {
-    warnings.push(`Windsor.ai (${connector}): no hay cuentas conectadas o el mes en curso no tiene datos todavía.`);
-  }
 
-  // account_id -> key de cliente mock, para las cuentas que sí tienen mapeo explícito.
-  const accountToMockClient = new Map<string, string>();
-  Object.entries(accountMap).forEach(([clientKey, accountId]) => accountToMockClient.set(accountId, clientKey));
+  if (byAccount.size === 0 && monthRows.length > 0) {
+    warnings.push(
+      `Windsor.ai (${connector}): la respuesta trajo ${monthRows.length} fila(s) pero ninguna tenía account_id reconocible — revisar nombres de campo contra windsor.ai/data-field/all/.`
+    );
+  }
+  if (byAccount.size === 0 && monthRows.length === 0) {
+    warnings.push(`Windsor.ai (${connector}): no hay cuentas conectadas, o ninguna tuvo actividad en el último año.`);
+  }
 
   const usedByMock = new Set<string>();
   const updatedMockClients: ClientData[] = baseClients.map((c) => {
