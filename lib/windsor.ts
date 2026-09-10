@@ -15,14 +15,15 @@ import type { ClientData } from "./types";
  * respuesta `{ data: [...] }` funcionan tal cual estaban asumidos acá.
  *
  * ENFOQUE: no requiere mapear cliente↔cuenta de antemano. Trae **todas**
- * las cuentas de Google Ads que Windsor.ai tenga conectadas y las agrega
+ * las cuentas de Google Ads que Windsor.ai tenga conectadas y las devuelve
  * como filas reales, una por cuenta, usando el nombre real de la cuenta.
- * Los clientes mock (`baseClients`) se mantienen sin tocar — sirven de
- * referencia/demo — y las cuentas reales se agregan a continuación.
- * `WINDSOR_GOOGLE_ADS_ACCOUNT_MAP` queda como mecanismo opcional para el
- * caso contrario: pisar el spend de un cliente mock puntual con una cuenta
- * real específica, cuando exista ese mapeo de negocio (ver
- * docs/explanation/estado-y-limitaciones.md).
+ * Si hay al menos una cuenta real, los clientes mock (`baseClients`) se
+ * descartan de la vista — ya no aportan una vez que hay datos reales — salvo
+ * los que tengan una cuenta real pisándolos explícitamente vía
+ * `WINDSOR_GOOGLE_ADS_ACCOUNT_MAP` (mecanismo opcional para cuando ya existe
+ * ese mapeo de negocio; ver docs/explanation/estado-y-limitaciones.md). Sin
+ * ninguna cuenta real conectada, se sigue mostrando el mock completo — la
+ * tabla nunca queda vacía.
  *
  * Credenciales (ver .env.example): WINDSOR_API_KEY — la única obligatoria.
  */
@@ -170,5 +171,15 @@ export async function fetchWindsorSpend(
       health: [],
     }));
 
-  return { clients: [...updatedMockClients, ...realClients], warnings };
+  // Con cuentas reales conectadas, los clientes ficticios de referencia ya
+  // no aportan nada — a pedido del usuario, se sacan de la vista. Solo se
+  // conservan los mock clients que tienen una cuenta real pisándolos
+  // explícitamente (accountMap): esos ya no son "ficticios" en la práctica.
+  // Si no hay ninguna cuenta real (Windsor sin cuentas, o error ya cubierto
+  // arriba), se siguen mostrando los 4 mock completos — nunca una tabla vacía.
+  if (realClients.length === 0 && usedByMock.size === 0) {
+    return { clients: baseClients, warnings };
+  }
+  const overriddenMockClients = updatedMockClients.filter((c) => usedByMock.has(accountMap[c.key]));
+  return { clients: [...overriddenMockClients, ...realClients], warnings };
 }

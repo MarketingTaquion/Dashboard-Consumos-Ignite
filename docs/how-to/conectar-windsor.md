@@ -6,7 +6,7 @@ Esta es la vía **prioritaria** sobre la integración directa a Google Ads API (
 
 ## No hace falta mapear nada de antemano
 
-Con solo `WINDSOR_API_KEY`, `/api/spend` trae **todas** las cuentas de Google Ads que Windsor.ai tenga conectadas y las agrega a la tabla como filas propias — nombre real de la cuenta, gasto real, $0 incluido si corresponde. Los 4 clientes mock (Norte Fintech, Andes Turismo, Terra Realty, MetroVoz) se mantienen sin tocar, como referencia/demo; las cuentas reales aparecen a continuación, identificadas por su nombre real (no por un cliente ficticio).
+Con solo `WINDSOR_API_KEY`, `/api/spend` trae **todas** las cuentas de Google Ads que Windsor.ai tenga conectadas y las muestra como filas propias — nombre real de la cuenta, gasto real, $0 incluido si corresponde. **En cuanto hay al menos una cuenta real, los 4 clientes mock (Norte Fintech, Andes Turismo, Terra Realty, MetroVoz) desaparecen de la vista** — dejan de aportar una vez que hay datos reales. Si Windsor no tiene ninguna cuenta conectada (o falla la consulta), se sigue mostrando el mock completo, para que la tabla nunca quede vacía.
 
 Esas cuentas reales todavía no tienen presupuesto/objetivo cargado (no hay media plan asociado) — el "Objetivo" sale en `$0` y el estado en "Sin objetivo cargado" hasta que exista ese dato (ver [estado y limitaciones](../explanation/estado-y-limitaciones.md)).
 
