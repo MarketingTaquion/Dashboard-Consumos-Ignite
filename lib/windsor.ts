@@ -131,6 +131,13 @@ export async function fetchWindsorSpend(
     );
   }
 
+  // TODO(temporal, quitar una vez validado con una cuenta real): diagnóstico
+  // completo de qué se parseó y qué devolvió Windsor, para poder leerlo
+  // directo del banner amarillo sin acceso a los logs del servidor.
+  warnings.push(
+    `[debug] accountMap parseado: ${JSON.stringify(accountMap)} · filas recibidas: ${rows.length} · cuentas encontradas en la respuesta: ${JSON.stringify([...spendByAccount.keys()])} · primera fila cruda: ${rows[0] ? JSON.stringify(rows[0]) : "(sin filas)"}`
+  );
+
   const updated: ClientData[] = baseClients.map((c) => {
     const accountId = accountMap[c.key];
     if (!accountId) return c; // sin mapeo -> se queda con el valor mock para este cliente
