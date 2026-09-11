@@ -668,7 +668,7 @@ export default function Dashboard() {
                   <th>Cliente</th>
                   <th>Plataforma</th>
                   <th className="sortable" onClick={() => onSort("pacing")}>
-                    Pacing{sortIcon("pacing")}
+                    Ritmo de consumo{sortIcon("pacing")}
                   </th>
                   <th className="num sortable" onClick={() => onSort("objetivo")}>
                     Objetivo{sortIcon("objetivo")}
