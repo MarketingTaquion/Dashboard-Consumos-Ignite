@@ -93,6 +93,65 @@ function firstDayOfMonth(d: Date): string {
 function toISODate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
+function addDays(d: Date, n: number): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+}
+
+/**
+ * Los 6 rangos de fecha reales que ofrece el selector del dashboard, más
+ * "month" (default). Windsor.ai sincroniza una vez por día en el plan
+ * Basic — "today"/"yesterday" pueden no reflejar la sincronización más
+ * reciente todavía (ver el aviso en el propio selector de fecha).
+ */
+export type DateRangeKey = "today" | "yesterday" | "7d" | "14d" | "28d" | "month" | "lastmonth";
+export const DATE_RANGE_KEYS: DateRangeKey[] = ["today", "yesterday", "7d", "14d", "28d", "month", "lastmonth"];
+
+export interface ResolvedDateRange {
+  dateFrom: string;
+  dateTo: string;
+  /** "Día actual" dentro del período elegido — para el cálculo de pacing. */
+  today: number;
+  /** Largo total del período elegido — para el cálculo de pacing. */
+  daysInPeriod: number;
+}
+
+/**
+ * Traduce un preset del selector de fecha a un rango concreto de
+ * date_from/date_to para pedirle a Windsor.ai, más "today"/"daysInPeriod"
+ * para que el cálculo de pacing (spend8 / budget vs. tiempo transcurrido)
+ * siga teniendo sentido fuera de "este mes": para una ventana fija (hoy,
+ * ayer, últimos N días, mes anterior) el período ya está 100% transcurrido
+ * — today = daysInPeriod.
+ */
+export function resolveDateRange(key: DateRangeKey, now: Date = new Date()): ResolvedDateRange {
+  const today0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  switch (key) {
+    case "today":
+      return { dateFrom: toISODate(today0), dateTo: toISODate(today0), today: 1, daysInPeriod: 1 };
+    case "yesterday": {
+      const y = addDays(today0, -1);
+      return { dateFrom: toISODate(y), dateTo: toISODate(y), today: 1, daysInPeriod: 1 };
+    }
+    case "7d":
+      return { dateFrom: toISODate(addDays(today0, -6)), dateTo: toISODate(today0), today: 7, daysInPeriod: 7 };
+    case "14d":
+      return { dateFrom: toISODate(addDays(today0, -13)), dateTo: toISODate(today0), today: 14, daysInPeriod: 14 };
+    case "28d":
+      return { dateFrom: toISODate(addDays(today0, -27)), dateTo: toISODate(today0), today: 28, daysInPeriod: 28 };
+    case "lastmonth": {
+      const firstOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const lastOfPrevMonth = addDays(firstOfThisMonth, -1);
+      const firstOfPrevMonth = new Date(lastOfPrevMonth.getFullYear(), lastOfPrevMonth.getMonth(), 1);
+      const days = lastOfPrevMonth.getDate();
+      return { dateFrom: toISODate(firstOfPrevMonth), dateTo: toISODate(lastOfPrevMonth), today: days, daysInPeriod: days };
+    }
+    case "month":
+    default: {
+      const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+      return { dateFrom: firstDayOfMonth(now), dateTo: toISODate(today0), today: now.getDate(), daysInPeriod: daysInMonth };
+    }
+  }
+}
 
 interface AccountTotals {
   accountId: string;
@@ -124,20 +183,24 @@ async function fetchRows(connector: string, dateFrom: string, dateTo: string, fi
  * Windsor.ai) en 3 capas — ver la nota del archivo. Nunca tira: cualquier
  * falla en cualquier capa se empuja a `warnings` y sigue con lo que ya tenga.
  */
-async function discoverPlatformAccounts(source: PlatformSource, warnings: string[]): Promise<Map<string, AccountTotals>> {
+async function discoverPlatformAccounts(
+  source: PlatformSource,
+  warnings: string[],
+  metricRange: ResolvedDateRange
+): Promise<Map<string, AccountTotals>> {
   const { connector, label } = source;
   const now = new Date();
-  const monthStart = firstDayOfMonth(now);
   const today = toISODate(now);
   const yearAgo = toISODate(new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()));
 
   const byAccount = new Map<string, AccountTotals>();
 
-  // Capa 1: mes en curso, spend y conversiones reales.
-  let monthRows: any[] = [];
+  // Capa 1: el rango elegido en el selector de fecha (por defecto, mes en
+  // curso), spend y conversiones reales.
+  let rangeRows: any[] = [];
   try {
-    monthRows = await fetchRows(connector, monthStart, today, "account_id,account_name,date,spend,conversions");
-    for (const row of monthRows) {
+    rangeRows = await fetchRows(connector, metricRange.dateFrom, metricRange.dateTo, "account_id,account_name,date,spend,conversions");
+    for (const row of rangeRows) {
       const accountId = String(row.account_id ?? "");
       if (!accountId) continue;
       const accountName = String(row.account_name ?? accountId);
@@ -147,7 +210,7 @@ async function discoverPlatformAccounts(source: PlatformSource, warnings: string
       byAccount.set(accountId, prev);
     }
   } catch (err: any) {
-    warnings.push(`Windsor.ai (${label}): falló la consulta del mes en curso. Detalle: ${err?.message || err}`);
+    warnings.push(`Windsor.ai (${label}): falló la consulta del rango de fecha elegido. Detalle: ${err?.message || err}`);
   }
 
   // Capa 2: últimos 12 meses, solo para descubrir cuentas sin actividad este
@@ -201,8 +264,18 @@ async function discoverPlatformAccounts(source: PlatformSource, warnings: string
  * previo. Si el mapeo opcional por plataforma (`WINDSOR_<PLATAFORMA>_ACCOUNT_MAP`)
  * tiene una entrada que apunta a esa cuenta, en cambio, el spend se aplica al
  * cliente mock correspondiente (pisa su valor) en vez de crear una fila nueva.
+ *
+ * `metricRange` fija el período real que se le pide a Windsor (por defecto,
+ * mes en curso) — ver `resolveDateRange`. El descubrimiento de cuentas sin
+ * actividad en ese período (capas 2 y 3 de `discoverPlatformAccounts`) sigue
+ * siendo siempre de los últimos 12 meses / metadata de cuentas, sin importar
+ * el rango elegido: existen para saber qué cuentas existen, no para el
+ * número que se muestra.
  */
-export async function fetchWindsorSpend(baseClients: ClientData[]): Promise<{ clients: ClientData[]; warnings: string[] }> {
+export async function fetchWindsorSpend(
+  baseClients: ClientData[],
+  metricRange: ResolvedDateRange = resolveDateRange("month")
+): Promise<{ clients: ClientData[]; warnings: string[] }> {
   const warnings: string[] = [];
 
   const usedByMock = new Set<string>(); // "platformKey:accountId" ya aplicado a un mock client
@@ -210,7 +283,7 @@ export async function fetchWindsorSpend(baseClients: ClientData[]): Promise<{ cl
   const allRealClients: ClientData[] = [];
 
   for (const source of PLATFORM_SOURCES) {
-    const byAccount = await discoverPlatformAccounts(source, warnings);
+    const byAccount = await discoverPlatformAccounts(source, warnings, metricRange);
     const accountMap = parseAccountMap(source.accountMapEnvVar);
 
     updatedMockClients = updatedMockClients.map((c) => {
