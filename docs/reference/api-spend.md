@@ -1,8 +1,14 @@
 # API — `GET /api/spend`
 
-Única ruta de API del proyecto. Devuelve el dataset completo que consume `Dashboard.tsx`. Sin parámetros de query — siempre devuelve el estado completo, el filtrado (por cliente/plataforma) ocurre client-side.
+Única ruta de API del proyecto. Devuelve el dataset completo que consume `Dashboard.tsx`. El filtrado por cliente/plataforma ocurre client-side; el rango de fecha, en cambio, sí es un parámetro de query real (ver abajo) porque determina qué le pedimos a Windsor.ai.
 
 `export const dynamic = "force-dynamic"` — nunca se cachea, cada request recalcula.
+
+## Query params
+
+| Param | Valores | Default | Descripción |
+|---|---|---|---|
+| `range` | `today \| yesterday \| 7d \| 14d \| 28d \| month \| lastmonth` | `month` | Rango de fecha a consultar. Cualquier valor no reconocido cae a `month`. Ver `resolveDateRange` en [`lib/windsor.ts`](../../lib/windsor.ts) para el cálculo exacto de cada uno. Solo tiene efecto cuando `source` termina siendo `"windsor"` — el fallback de Google Ads directo (`lib/googleAds.ts`) todavía no soporta rangos, siempre consulta "mes en curso" sin importar este parámetro. |
 
 ## Respuesta
 
@@ -11,8 +17,8 @@ Tipo `SpendResponse` (definido en [`lib/types.ts`](../../lib/types.ts)):
 | Campo | Tipo | Descripción |
 |---|---|---|
 | `source` | `"mock" \| "google-ads" \| "windsor"` | De dónde salieron los datos. `"windsor"` si `hasWindsorCredentials()` devuelve `true` (prioridad); si no, `"google-ads"` si `hasGoogleAdsCredentials()` devuelve `true`; si no, `"mock"`. También cae a `"mock"` si la consulta real que corresponda falló. |
-| `today` | `number` | Día del mes usado como corte "hoy". En mock siempre `8`; con datos reales (Windsor o Google Ads directo), `now.getDate()`. |
-| `daysInMonth` | `number` | Días totales del mes en curso. En mock siempre `30`. |
+| `today` | `number` | "Día actual" dentro del rango elegido — con `range=month` es el día del mes; con cualquier otro rango (una ventana fija, ya 100% transcurrida) es igual a `daysInMonth`. En mock siempre `8`, sin importar `range` (el mock no varía por rango todavía). |
+| `daysInMonth` | `number` | Largo total del período elegido (30/31 para `month`, 7/14/28 para esos rangos, etc. — pese al nombre, no es literalmente "días del mes" fuera de `range=month`). En mock siempre `30`. |
 | `clients` | `ClientData[]` | Ver abajo. |
 | `warnings` | `string[]` \| `undefined` | Presente solo si algo falló parcialmente (ej. Google Ads no respondió para un cliente puntual) — la respuesta sigue siendo 200 igual, el fallback ya ocurrió server-side. |
 

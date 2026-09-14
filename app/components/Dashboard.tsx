@@ -165,14 +165,17 @@ export default function Dashboard() {
   }, [dateMenuOpen]);
 
   useEffect(() => {
-    fetch("/api/spend")
+    // "custom" todavía no está conectado (ver nota en el menú de fecha) — se
+    // sigue pidiendo "month" hasta que se implemente el rango personalizado.
+    const range = datePreset === "custom" ? "month" : datePreset;
+    fetch(`/api/spend?range=${range}`)
       .then((r) => {
         if (!r.ok) throw new Error("HTTP " + r.status);
         return r.json();
       })
       .then((body: SpendResponse) => setData(body))
       .catch((err) => setError(String(err?.message || err)));
-  }, []);
+  }, [datePreset]);
 
   const clientsIncluded = useMemo(() => {
     if (!data) return [];
@@ -404,17 +407,20 @@ export default function Dashboard() {
                     key={d.key}
                     role="menuitem"
                     aria-current={datePreset === d.key}
-                    disabled={d.key !== "month"}
-                    title={d.key !== "month" ? "Todavía sin datos históricos reales conectados" : undefined}
                     onClick={() => {
                       setDatePreset(d.key);
                       setDateMenuOpen(false);
                     }}
                   >
                     {d.label}
-                    {d.key !== "month" && <span className="soon">pronto</span>}
                   </button>
                 ))}
+                <div className="date-menu-divider" />
+                <div className="date-menu-note">
+                  Windsor.ai sincroniza una vez al día — &quot;Hoy&quot; y &quot;Ayer&quot; pueden no reflejar todavía la
+                  sincronización más reciente.
+                </div>
+                <div className="date-menu-divider" />
                 <button role="menuitem" aria-current={datePreset === "custom"} onClick={() => setDatePreset("custom")}>
                   Personalizado <span style={{ fontSize: 10 }}>{datePreset === "custom" ? "▴" : "▸"}</span>
                 </button>
