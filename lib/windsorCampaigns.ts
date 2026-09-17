@@ -25,11 +25,16 @@ import { resolveDateRange, type DateRangeKey } from "./windsor";
  * garantía de que el resto de los campos de la capa 2 sean 100%
  * compatibles entre sí; si aparece un nuevo error de "no report in common",
  * es la próxima capa a separar):
- *   1. Núcleo — account/campaign + spend/conversions/impressions/clicks.
- *   2. Cuota de subasta y calidad — search_impression_share, quality_score,
+ *   1. Núcleo — account/campaign + spend/conversions/impressions/clicks,
+ *      del período elegido.
+ *   2. Descubrimiento — últimos 12 meses, solo identificadores (sin
+ *      métricas). Encuentra campañas pausadas/sin actividad en el período
+ *      elegido, que si no quedarían afuera en vez de mostrar $0 (mismo
+ *      problema ya resuelto a nivel cuenta en lib/windsor.ts).
+ *   3. Cuota de subasta y calidad — search_impression_share, quality_score,
  *      search_rank_lost_impression_share, search_absolute_top_impression_share,
  *      search_top_impression_share, optimization_score.
- *   3. search_budget_lost_impression_share, sola (la que Windsor marcó como
+ *   4. search_budget_lost_impression_share, sola (la que Windsor marcó como
  *      incompatible con el resto).
  *
  * No se piden todavía content_impression_share (% impresión de display) ni
@@ -49,6 +54,7 @@ const WINDSOR_BASE_URL = "https://connectors.windsor.ai";
 const CONNECTOR = "google_ads";
 
 const JOIN_FIELDS = "account_id,account_name,campaign_id,campaign_name,date";
+const DISCOVERY_FIELDS = "account_id,account_name,campaign_id,campaign_name";
 const CORE_FIELDS = `${JOIN_FIELDS},spend,conversions,impressions,clicks`;
 const AUCTION_FIELDS = `${JOIN_FIELDS},search_impression_share,quality_score,search_rank_lost_impression_share,search_absolute_top_impression_share,search_top_impression_share,optimization_score`;
 const BUDGET_LOST_FIELDS = `${JOIN_FIELDS},search_budget_lost_impression_share`;
@@ -103,6 +109,10 @@ function getOrCreate(byCampaign: Map<string, Accum>, row: any): Accum | null {
   return acc;
 }
 
+function toISODate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
 async function fetchLayer(fields: string, dateFrom: string, dateTo: string): Promise<any[]> {
   const params = new URLSearchParams({ api_key: process.env.WINDSOR_API_KEY!, fields, date_from: dateFrom, date_to: dateTo });
   const res = await fetch(`${WINDSOR_BASE_URL}/${CONNECTOR}?${params.toString()}`, { cache: "no-store" });
@@ -142,8 +152,29 @@ export async function fetchGoogleAdsCampaigns(
     return { campaigns: [], warnings };
   }
 
+  // Descubrimiento — últimos 12 meses, solo identificadores (sin métricas).
+  // Mismo problema que ya resolvimos a nivel cuenta en lib/windsor.ts:
+  // Windsor no manda una fila con spend "0", omite la campaña directamente
+  // si no tuvo ningún evento en el período elegido — sin esto, una campaña
+  // pausada desaparece en vez de mostrar $0 real. Corre siempre, no solo
+  // cuando la capa 1 vino vacía, para no perder campañas mixtas (algunas
+  // activas, otras pausadas, en la misma cuenta).
+  try {
+    const now = new Date();
+    const yearAgo = toISODate(new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()));
+    const rows = await fetchLayer(DISCOVERY_FIELDS, yearAgo, toISODate(now));
+    for (const row of rows) {
+      const acc = getOrCreate(byCampaign, row);
+      if (acc) acc.hasCore = true; // existe, aunque no haya tenido actividad en el período elegido
+    }
+  } catch (err: any) {
+    warnings.push(
+      `Windsor.ai (Google Ads, campañas): no se pudo consultar el histórico de 12 meses para descubrir campañas sin actividad. Detalle: ${err?.message || err}`
+    );
+  }
+
   if (byCampaign.size === 0) {
-    warnings.push(`Windsor.ai (Google Ads, campañas): no se encontró ninguna campaña con datos en el período elegido.`);
+    warnings.push(`Windsor.ai (Google Ads, campañas): no se encontró ninguna campaña conectada, ni con actividad ni sin ella, en el último año.`);
     return { campaigns: [], warnings };
   }
 
