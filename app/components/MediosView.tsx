@@ -11,9 +11,9 @@ const PLATFORMS: { key: PlatformKey; label: string; varName: string }[] = [
 
 // Mismo set de presets que la vista de Finanzas (ver DATE_PRESETS en
 // Dashboard.tsx) — duplicado a propósito, no importado de lib/windsor.ts:
-// ese archivo es solo-servidor. "Personalizado" no está acá todavía porque
-// tampoco está conectado del lado de Finanzas.
-type DatePreset = "today" | "yesterday" | "7d" | "14d" | "28d" | "month" | "lastmonth";
+// ese archivo es solo-servidor. "custom" se guarda igual que en Finanzas,
+// pero todavía no hay rango personalizado real conectado — cae a "month".
+type DatePreset = "today" | "yesterday" | "7d" | "14d" | "28d" | "month" | "lastmonth" | "custom";
 const DATE_PRESETS: { key: DatePreset; label: string }[] = [
   { key: "today", label: "Hoy" },
   { key: "yesterday", label: "Ayer" },
@@ -41,6 +41,8 @@ export default function MediosView() {
   const [platform, setPlatform] = useState<PlatformKey>("google");
   const [datePreset, setDatePreset] = useState<DatePreset>("month");
   const [dateMenuOpen, setDateMenuOpen] = useState(false);
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
   const [data, setData] = useState<CampaignsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const dateMenuRef = useRef<HTMLDivElement>(null);
@@ -58,7 +60,10 @@ export default function MediosView() {
 
   useEffect(() => {
     setData(null);
-    fetch(`/api/campaigns?platform=${platform}&range=${datePreset}`)
+    // "custom" todavía no está conectado (ver nota en el menú de fecha) — se
+    // sigue pidiendo "month" hasta que se implemente el rango personalizado.
+    const range = datePreset === "custom" ? "month" : datePreset;
+    fetch(`/api/campaigns?platform=${platform}&range=${range}`)
       .then((r) => {
         if (!r.ok) throw new Error("HTTP " + r.status);
         return r.json();
@@ -141,6 +146,28 @@ export default function MediosView() {
                   Windsor.ai sincroniza una vez al día — &quot;Hoy&quot; y &quot;Ayer&quot; pueden no reflejar todavía la
                   sincronización más reciente.
                 </div>
+                <div className="date-menu-divider" />
+                <button role="menuitem" aria-current={datePreset === "custom"} onClick={() => setDatePreset("custom")}>
+                  Personalizado <span style={{ fontSize: 10 }}>{datePreset === "custom" ? "▴" : "▸"}</span>
+                </button>
+                {datePreset === "custom" && (
+                  <div className="date-custom">
+                    <label>
+                      Desde
+                      <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
+                    </label>
+                    <label>
+                      Hasta
+                      <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
+                    </label>
+                    <button className="date-apply" onClick={() => setDateMenuOpen(false)}>
+                      Aplicar
+                    </button>
+                    <div className="date-menu-note">
+                      El rango se guarda, pero todavía no hay histórico real conectado — sigue mostrando &quot;Este mes&quot;.
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
