@@ -1,0 +1,107 @@
+import type { CampaignRow, PlatformKey } from "./types";
+
+/**
+ * Datos de ejemplo para la vista Medios — mismas filas que se usaron en el
+ * Artifact "Pulso Ignite — Perfil Medios" (wireframe), para que el mockup y
+ * el mock de la app real coincidan. Se usa mientras no hay WINDSOR_API_KEY,
+ * o para una plataforma que todavía no tiene fetcher de campañas (ver
+ * app/api/campaigns/route.ts).
+ */
+
+const GOOGLE_ADS: CampaignRow[] = [
+  {
+    accountId: "mock-norte",
+    accountName: "Norte Fintech",
+    campaignId: "c1",
+    campaignName: "Search — Marca",
+    impressions: 48200,
+    clicks: 2310,
+    cpm: 412,
+    ctr: 4.8,
+    cpl: 890,
+    conversions: 61,
+    searchImpressionShare: 78,
+    qualityScore: 8,
+    searchBudgetLostIS: 14,
+    searchRankLostIS: 8,
+    searchAbsoluteTopIS: 41,
+    searchTopIS: 71,
+    optimizationScore: 82,
+  },
+  {
+    accountId: "mock-norte",
+    accountName: "Norte Fintech",
+    campaignId: "c2",
+    campaignName: "Search — Genérica",
+    impressions: 126400,
+    clicks: 3980,
+    cpm: 540,
+    ctr: 3.1,
+    cpl: 1240,
+    conversions: 74,
+    searchImpressionShare: 44,
+    qualityScore: 6,
+    searchBudgetLostIS: 39,
+    searchRankLostIS: 17,
+    searchAbsoluteTopIS: 12,
+    searchTopIS: 28,
+    optimizationScore: 64,
+  },
+  {
+    accountId: "mock-andes",
+    accountName: "Andes Turismo",
+    campaignId: "c3",
+    campaignName: "Search — Destinos",
+    impressions: 89700,
+    clicks: 4120,
+    cpm: 298,
+    ctr: 4.6,
+    cpl: 610,
+    conversions: 102,
+    searchImpressionShare: 61,
+    qualityScore: 9,
+    searchBudgetLostIS: 22,
+    searchRankLostIS: 17,
+    searchAbsoluteTopIS: 26,
+    searchTopIS: 55,
+    optimizationScore: 88,
+  },
+  {
+    accountId: "mock-terra",
+    accountName: "Terra Realty",
+    campaignId: "c4",
+    campaignName: "Display — Remarketing",
+    impressions: 210100,
+    clicks: 1860,
+    cpm: 156,
+    ctr: 0.9,
+    cpl: 980,
+    conversions: 18,
+    qualityScore: 7,
+    optimizationScore: 55,
+    // Sin search_impression_share/lost IS/posición: son campañas de Display, no Search.
+  },
+  {
+    accountId: "mock-metrovoz",
+    accountName: "MetroVoz",
+    campaignId: "c5",
+    campaignName: "Search — Genérica",
+    impressions: 64900,
+    clicks: 2750,
+    cpm: 375,
+    ctr: 4.2,
+    cpl: 720,
+    conversions: 55,
+    searchImpressionShare: 52,
+    qualityScore: 5,
+    searchBudgetLostIS: 31,
+    searchRankLostIS: 17,
+    searchAbsoluteTopIS: 9,
+    searchTopIS: 19,
+    optimizationScore: 61,
+  },
+];
+
+export const MOCK_CAMPAIGNS: Partial<Record<PlatformKey, CampaignRow[]>> = {
+  google: GOOGLE_ADS,
+};
