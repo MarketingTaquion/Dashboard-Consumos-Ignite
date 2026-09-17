@@ -1,12 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CampaignsResponse, PlatformKey } from "@/lib/types";
 
 const PLATFORMS: { key: PlatformKey; label: string; varName: string }[] = [
   { key: "google", label: "Google Ads", varName: "--plat-google" },
   { key: "meta", label: "Meta Ads", varName: "--plat-meta" },
   { key: "tiktok", label: "TikTok Ads", varName: "--plat-tiktok" },
+];
+
+// Mismo set de presets que la vista de Finanzas (ver DATE_PRESETS en
+// Dashboard.tsx) — duplicado a propósito, no importado de lib/windsor.ts:
+// ese archivo es solo-servidor. "Personalizado" no está acá todavía porque
+// tampoco está conectado del lado de Finanzas.
+type DatePreset = "today" | "yesterday" | "7d" | "14d" | "28d" | "month" | "lastmonth";
+const DATE_PRESETS: { key: DatePreset; label: string }[] = [
+  { key: "today", label: "Hoy" },
+  { key: "yesterday", label: "Ayer" },
+  { key: "7d", label: "Últimos 7 días" },
+  { key: "14d", label: "Últimos 14 días" },
+  { key: "28d", label: "Últimos 28 días" },
+  { key: "month", label: "Este mes" },
+  { key: "lastmonth", label: "Mes anterior" },
 ];
 
 function fmtInt(n: number): string {
@@ -24,19 +39,33 @@ function fmtScore10(n?: number): string {
 
 export default function MediosView() {
   const [platform, setPlatform] = useState<PlatformKey>("google");
+  const [datePreset, setDatePreset] = useState<DatePreset>("month");
+  const [dateMenuOpen, setDateMenuOpen] = useState(false);
   const [data, setData] = useState<CampaignsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const dateMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!dateMenuOpen) return;
+    function onClickOutside(e: MouseEvent) {
+      if (dateMenuRef.current && !dateMenuRef.current.contains(e.target as Node)) {
+        setDateMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [dateMenuOpen]);
 
   useEffect(() => {
     setData(null);
-    fetch(`/api/campaigns?platform=${platform}&range=month`)
+    fetch(`/api/campaigns?platform=${platform}&range=${datePreset}`)
       .then((r) => {
         if (!r.ok) throw new Error("HTTP " + r.status);
         return r.json();
       })
       .then((body: CampaignsResponse) => setData(body))
       .catch((err) => setError(String(err?.message || err)));
-  }, [platform]);
+  }, [platform, datePreset]);
 
   if (error) {
     return (
@@ -54,6 +83,7 @@ export default function MediosView() {
   }
 
   const activeLabel = PLATFORMS.find((p) => p.key === platform)?.label ?? platform;
+  const dateLabel = DATE_PRESETS.find((d) => d.key === datePreset)?.label ?? "Este mes";
 
   return (
     <div className="wrap">
@@ -85,13 +115,44 @@ export default function MediosView() {
         </div>
       )}
 
-      <div className="chip-row" style={{ margin: "20px 0 16px" }}>
-        {PLATFORMS.map((p) => (
-          <button key={p.key} className="chip plat" aria-pressed={platform === p.key} onClick={() => setPlatform(p.key)}>
-            <span className="dot" style={{ background: `var(${p.varName})` }} />
-            {p.label}
-          </button>
-        ))}
+      <div className="controls-row">
+        <div className="controls-left">
+          <div className="dropdown-wrap" ref={dateMenuRef}>
+            <button className="chip" aria-expanded={dateMenuOpen} onClick={() => setDateMenuOpen((v) => !v)}>
+              {dateLabel} <span style={{ fontSize: 10 }}>▾</span>
+            </button>
+            {dateMenuOpen && (
+              <div className="date-menu" role="menu">
+                {DATE_PRESETS.map((d) => (
+                  <button
+                    key={d.key}
+                    role="menuitem"
+                    aria-current={datePreset === d.key}
+                    onClick={() => {
+                      setDatePreset(d.key);
+                      setDateMenuOpen(false);
+                    }}
+                  >
+                    {d.label}
+                  </button>
+                ))}
+                <div className="date-menu-divider" />
+                <div className="date-menu-note">
+                  Windsor.ai sincroniza una vez al día — &quot;Hoy&quot; y &quot;Ayer&quot; pueden no reflejar todavía la
+                  sincronización más reciente.
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="chip-row">
+          {PLATFORMS.map((p) => (
+            <button key={p.key} className="chip plat" aria-pressed={platform === p.key} onClick={() => setPlatform(p.key)}>
+              <span className="dot" style={{ background: `var(${p.varName})` }} />
+              {p.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="card">
