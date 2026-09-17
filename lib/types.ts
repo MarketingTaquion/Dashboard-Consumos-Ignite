@@ -31,3 +31,37 @@ export interface SpendResponse {
   clients: ClientData[];
   warnings?: string[]; // ej. "Google Ads devolvió error, se usó mock para ese cliente"
 }
+
+/**
+ * Fila de campaña para la vista Medios (ver Artifact "Pulso Ignite — Perfil
+ * Medios"). Granularidad campaña, no cuenta — un nivel más profundo que
+ * ClientData, que es para la vista de Finanzas.
+ */
+export interface CampaignRow {
+  accountId: string;
+  accountName: string;
+  campaignId: string;
+  campaignName: string;
+  impressions: number;
+  clicks: number;
+  cpm: number;
+  ctr: number; // %, 0-100
+  cpl: number; // spend / conversions; 0 si conversions es 0
+  conversions: number;
+  // Exclusivas de Google Ads — undefined si el campo no vino en la
+  // respuesta de Windsor para esa campaña (no se fabrica un 0).
+  searchImpressionShare?: number; // %, 0-100
+  qualityScore?: number; // 1-10, promedio del período
+  searchBudgetLostIS?: number; // %, 0-100
+  searchRankLostIS?: number; // %, 0-100
+  searchAbsoluteTopIS?: number; // %, 0-100
+  searchTopIS?: number; // %, 0-100
+  optimizationScore?: number; // %, 0-100
+}
+
+export interface CampaignsResponse {
+  source: "mock" | "windsor";
+  platform: PlatformKey;
+  campaigns: CampaignRow[];
+  warnings?: string[];
+}
