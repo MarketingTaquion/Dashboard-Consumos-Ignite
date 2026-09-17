@@ -1,4 +1,5 @@
 import type { ClientData, PlatformKey } from "./types";
+import { fetchMediaPlanBudgetByAccount } from "./mediaPlan";
 
 /**
  * Integración con Windsor.ai — API REST (`connectors.windsor.ai`), la capa de
@@ -54,6 +55,11 @@ import type { ClientData, PlatformKey } from "./types";
  * en SDD-TAQUION): YouTube, LinkedIn Ads — agregar una entrada más a
  * PLATFORM_SOURCES y (si hace falta mapeo) su propia env var
  * WINDSOR_<PLATAFORMA>_ACCOUNT_MAP.
+ *
+ * PRESUPUESTO PROYECTADO (media plan): ver lib/mediaPlan.ts — se lee de una
+ * hoja de Google Sheets, vía el mismo Windsor.ai (connector "googlesheets",
+ * no una herramienta nueva). Sin fila para una cuenta en el mes en curso,
+ * esa cuenta sigue en budget 0 / "Sin objetivo cargado" — nunca se inventa.
  *
  * Credenciales (ver .env.example): WINDSOR_API_KEY — la única obligatoria.
  */
@@ -278,6 +284,13 @@ export async function fetchWindsorSpend(
 ): Promise<{ clients: ClientData[]; warnings: string[] }> {
   const warnings: string[] = [];
 
+  // Presupuesto proyectado (media plan) por cuenta, del mes en curso — sale
+  // de la hoja maestra de proyectados vía el connector "googlesheets" de
+  // Windsor (ver lib/mediaPlan.ts). Se pide una sola vez, no por plataforma:
+  // la hoja mezcla las 3 en las mismas filas.
+  const { byAccount: budgetByAccount, warning: mediaPlanWarning } = await fetchMediaPlanBudgetByAccount();
+  if (mediaPlanWarning) warnings.push(mediaPlanWarning);
+
   const usedByMock = new Set<string>(); // "platformKey:accountId" ya aplicado a un mock client
   let updatedMockClients: ClientData[] = baseClients;
   const allRealClients: ClientData[] = [];
@@ -316,13 +329,14 @@ export async function fetchWindsorSpend(
           key: `windsor-${source.platformKey}-${t.accountId}`,
           name: t.accountName,
           vertical: `Cuenta real (Windsor.ai — ${source.label})`,
-          budget: 0, // sin media plan cargado todavía — no se inventa un objetivo
+          // Si la hoja de proyectados tiene un presupuesto para esta cuenta
+          // este mes, se usa; si no, sigue en $0 (no se inventa un objetivo).
+          budget: budgetByAccount.get(t.accountId) ?? 0,
           spend8: t.spend,
           mix: { [source.platformKey]: 100 } as Partial<Record<PlatformKey, number>>,
-          // Sin media plan todavía no hay CPL objetivo que comparar — se
-          // muestra el gasto total de la cuenta, que es lo que coincide
-          // directo con lo que se ve en la plataforma (a diferencia del
-          // costo por conversión, que es otra métrica).
+          // El CPL objetivo (distinto del presupuesto) todavía no se carga
+          // desde la hoja — se muestra el gasto total de la cuenta, que es
+          // lo que coincide directo con lo que se ve en la plataforma.
           cpl: { [source.platformKey]: { target: 0, real: t.spend, label: "Gasto" } } as ClientData["cpl"],
           health: [],
         })

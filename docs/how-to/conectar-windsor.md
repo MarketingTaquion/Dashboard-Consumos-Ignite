@@ -14,6 +14,24 @@ Con solo `WINDSOR_API_KEY`, `/api/spend` trae **todas** las cuentas de Google Ad
 
 Las capas 2 y 3 solo aportan el nombre de la cuenta; si no tuvo actividad este mes, el gasto queda en $0. **En cuanto hay al menos una cuenta real, los 4 clientes mock (Norte Fintech, Andes Turismo, Terra Realty, MetroVoz) desaparecen de la vista** — dejan de aportar una vez que hay datos reales. Si Windsor no tiene ninguna cuenta conectada (o falla la consulta), se sigue mostrando el mock completo, para que la tabla nunca quede vacía.
 
+## Presupuesto proyectado (media plan) — hoja de Google Sheets
+
+Las cuentas reales aparecen con `$0` de objetivo y "Sin objetivo cargado" hasta que exista un presupuesto proyectado para cruzar. Eso sale de una **"Hoja maestra de proyectados"** en Google Sheets, conectada a Windsor.ai como una fuente más (connector `googlesheets`, no una herramienta nueva) — ver [`lib/mediaPlan.ts`](../../lib/mediaPlan.ts).
+
+**Columnas que tiene que tener la hoja**, en la primera fila (Windsor las toma tal cual están escritas, sin normalizar):
+
+| Columna | Formato | Ejemplo |
+|---|---|---|
+| `cliente` | texto libre — hoy es solo referencia humana en la hoja, no se cruza con nada | `norte` |
+| `plataforma` | `google`, `meta`, `tiktok` o `linkedin` | `google` |
+| `mes` | `2026-09` o `2026-09-01` (los 2 formatos sirven) | `2026-09` |
+| `cuenta` | el `account_id` real tal cual aparece en Windsor.ai — es lo que cruza esta fila con la cuenta real del dashboard | `6551720043` |
+| `presupuesto_proyectado` | número plano, sin `$` ni separador de miles | `1200000` |
+
+Para conectarla: en Windsor.ai → **Add data** → **Google Sheets** → compartir la hoja como *Viewer* con el service account que te muestra la pantalla → pegar el link de la hoja → **Add Account**. No hace falta ninguna variable de entorno nueva — usa la misma `WINDSOR_API_KEY`.
+
+Sin ninguna fila para una cuenta en el mes en curso, esa cuenta se queda en `$0` / "Sin objetivo cargado" — igual que antes, nunca se inventa un número.
+
 Esas cuentas reales todavía no tienen presupuesto/objetivo cargado (no hay media plan asociado) — el "Objetivo" sale en `$0` y el estado en "Sin objetivo cargado" hasta que exista ese dato (ver [estado y limitaciones](../explanation/estado-y-limitaciones.md)).
 
 `WINDSOR_GOOGLE_ADS_ACCOUNT_MAP` queda como mecanismo **opcional** para el caso contrario: si ya sabés que una cuenta real corresponde a uno de los clientes mock, podés pisar el spend de ese cliente puntual en vez de que aparezca como fila nueva (`cliente_interno:account_id`, ver [referencia de variables de entorno](../reference/variables-de-entorno.md)).
