@@ -219,16 +219,30 @@ export async function fetchGoogleAdsCampaigns(
     );
   }
 
-  // Un campo que no vino en NINGUNA campaña (más allá de por qué) es una
-  // señal a mirar — se avisa una sola vez, no por fila.
-  AVG_FIELDS.forEach((f) => {
-    const cameForAny = [...byCampaign.values()].some((acc) => (acc.counts[f] ?? 0) > 0);
-    if (!cameForAny) {
-      warnings.push(
-        `Windsor.ai (Google Ads, campañas): el campo "${f}" no vino en ninguna fila — esa columna va a quedar en "—" (verificar nombre contra windsor.ai/data-field/google_ads/).`
-      );
-    }
-  });
+  // Cuota de subasta, calidad y puntuación de optimización son métricas que
+  // Google Ads calcula A PARTIR de impresiones reales en el período — si
+  // ninguna campaña tuvo impresiones (ej. todas pausadas), es esperable que
+  // ninguna de estas venga, sin que eso implique un nombre de campo mal
+  // escrito. Por eso se distingue: si hay al menos una campaña con
+  // impresiones y aun así un campo no vino en ninguna fila, ESO sí es
+  // sospechoso (posible nombre de campo incorrecto) y se avisa por campo.
+  // Si NINGUNA campaña tuvo impresiones, se avisa una única vez, aclarando
+  // que es esperable.
+  const anyImpressions = [...byCampaign.values()].some((acc) => acc.impressions > 0);
+  if (anyImpressions) {
+    AVG_FIELDS.forEach((f) => {
+      const cameForAny = [...byCampaign.values()].some((acc) => (acc.counts[f] ?? 0) > 0);
+      if (!cameForAny) {
+        warnings.push(
+          `Windsor.ai (Google Ads, campañas): el campo "${f}" no vino en ninguna fila pese a haber campañas con impresiones este período — esa columna va a quedar en "—" (verificar nombre contra windsor.ai/data-field/google_ads/).`
+        );
+      }
+    });
+  } else {
+    warnings.push(
+      `Windsor.ai (Google Ads, campañas): ninguna campaña tuvo impresiones en este período, así que cuota de subasta, nivel de calidad, pérdidas por presupuesto/ranking, posición y puntuación de optimización no tienen valor que calcular — esperable con cuentas sin actividad, no un problema de Windsor. Esas columnas quedan en "—" hasta que haya una campaña con impresiones reales.`
+    );
+  }
 
   const campaigns: CampaignRow[] = [...byCampaign.values()]
     .filter((acc) => acc.hasCore) // descarta filas que solo aparecieron en capas 2/3 (no deberían existir, pero por las dudas)
