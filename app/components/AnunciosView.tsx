@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { CampaignsResponse, PlatformKey } from "@/lib/types";
+import type { AdsResponse, PlatformKey } from "@/lib/types";
 
 const PLATFORMS: { key: PlatformKey; label: string; varName: string }[] = [
   { key: "google", label: "Google Ads", varName: "--plat-google" },
@@ -9,10 +9,8 @@ const PLATFORMS: { key: PlatformKey; label: string; varName: string }[] = [
   { key: "tiktok", label: "TikTok Ads", varName: "--plat-tiktok" },
 ];
 
-// Mismo set de presets que la vista de Finanzas (ver DATE_PRESETS en
-// Dashboard.tsx) — duplicado a propósito, no importado de lib/windsor.ts:
-// ese archivo es solo-servidor. "custom" se guarda igual que en Finanzas,
-// pero todavía no hay rango personalizado real conectado — cae a "month".
+// Mismo set de presets que Dashboard.tsx / MediosView.tsx — duplicado a
+// propósito, ver la nota en MediosView.tsx.
 type DatePreset = "today" | "yesterday" | "7d" | "14d" | "28d" | "month" | "lastmonth" | "custom";
 const DATE_PRESETS: { key: DatePreset; label: string }[] = [
   { key: "today", label: "Hoy" },
@@ -30,32 +28,14 @@ function fmtInt(n: number): string {
 function fmtMoney(n: number): string {
   return "$" + Math.round(n).toLocaleString("es-AR");
 }
-function fmtPct(n?: number): string {
-  return n === undefined ? "—" : Math.round(n) + "%";
-}
-function fmtScore10(n?: number): string {
-  return n === undefined ? "—" : n.toFixed(1) + "/10";
-}
-function fmtFreq(n?: number): string {
-  return n === undefined ? "—" : n.toFixed(1);
-}
-function fmtSeconds(n?: number): string {
-  return n === undefined ? "—" : n.toFixed(1) + "s";
-}
-function extraColCount(platform: PlatformKey): number {
-  if (platform === "google") return 7;
-  if (platform === "meta") return 2;
-  if (platform === "tiktok") return 4;
-  return 0;
-}
 
-export default function MediosView() {
+export default function AnunciosView() {
   const [platform, setPlatform] = useState<PlatformKey>("google");
   const [datePreset, setDatePreset] = useState<DatePreset>("month");
   const [dateMenuOpen, setDateMenuOpen] = useState(false);
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
-  const [data, setData] = useState<CampaignsResponse | null>(null);
+  const [data, setData] = useState<AdsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const dateMenuRef = useRef<HTMLDivElement>(null);
 
@@ -72,29 +52,27 @@ export default function MediosView() {
 
   useEffect(() => {
     setData(null);
-    // "custom" todavía no está conectado (ver nota en el menú de fecha) — se
-    // sigue pidiendo "month" hasta que se implemente el rango personalizado.
     const range = datePreset === "custom" ? "month" : datePreset;
-    fetch(`/api/campaigns?platform=${platform}&range=${range}`)
+    fetch(`/api/ads?platform=${platform}&range=${range}`)
       .then((r) => {
         if (!r.ok) throw new Error("HTTP " + r.status);
         return r.json();
       })
-      .then((body: CampaignsResponse) => setData(body))
+      .then((body: AdsResponse) => setData(body))
       .catch((err) => setError(String(err?.message || err)));
   }, [platform, datePreset]);
 
   if (error) {
     return (
       <div className="wrap">
-        <div className="loading-state">No se pudo cargar /api/campaigns: {error}</div>
+        <div className="loading-state">No se pudo cargar /api/ads: {error}</div>
       </div>
     );
   }
   if (!data) {
     return (
       <div className="wrap">
-        <div className="loading-state">Cargando campañas…</div>
+        <div className="loading-state">Cargando anuncios…</div>
       </div>
     );
   }
@@ -119,8 +97,8 @@ export default function MediosView() {
       </header>
 
       <nav className="medios-subnav">
-        <a href="/medios" aria-current="page">Campañas</a>
-        <a href="/medios/anuncios">Anuncios</a>
+        <a href="/medios">Campañas</a>
+        <a href="/medios/anuncios" aria-current="page">Anuncios</a>
         <a href="/medios/comparacion">Comparación de plataformas</a>
       </nav>
 
@@ -133,7 +111,7 @@ export default function MediosView() {
         <div className="mock-note">
           <span className="tq-arrow">↘</span>{" "}
           <span>
-            <b>Datos de ejemplo.</b> En cuanto haya campañas reales de {activeLabel} en Windsor.ai, se muestran acá.
+            <b>Datos de ejemplo.</b> En cuanto haya anuncios reales de {activeLabel} en Windsor.ai, se muestran acá.
           </span>
         </div>
       )}
@@ -201,96 +179,37 @@ export default function MediosView() {
       </div>
 
       <div className="card">
-        <h2>Campañas — {activeLabel}</h2>
-        <div className="card-sub">
-          {platform === "google" && "Métricas comunes + cuota de subasta y calidad, propias de Google Ads."}
-          {platform === "meta" && "Métricas comunes + alcance y frecuencia, propias de campañas de alcance/awareness."}
-          {platform === "tiktok" && "Métricas comunes + alcance, frecuencia y video — el formato nativo de la plataforma."}
-        </div>
-        <div className="table-scroll-x" style={{ marginTop: 14 }}>
-          <table className="dense">
-            <thead>
-              <tr>
-                <th>Cuenta</th>
-                <th>Campaña</th>
-                <th className="num">Impr.</th>
-                <th className="num">Clicks</th>
-                <th className="num">CPM</th>
-                <th className="num">CTR</th>
-                <th className="num">CPL</th>
-                <th className="num">Conv.</th>
-                {platform === "google" && (
-                  <>
-                    <th className="num">Cuota impr.</th>
-                    <th className="num">Nivel calidad</th>
-                    <th className="num">Pérd. presup.</th>
-                    <th className="num">Pérd. ranking</th>
-                    <th className="num">Pos. abs.</th>
-                    <th className="num">Pos. superior</th>
-                    <th className="num">Punt. optim.</th>
-                  </>
-                )}
-                {(platform === "meta" || platform === "tiktok") && (
-                  <>
-                    <th className="num">Alcance</th>
-                    <th className="num">Frec.</th>
-                  </>
-                )}
-                {platform === "tiktok" && (
-                  <>
-                    <th className="num">Tiempo prom.</th>
-                    <th className="num">Likes</th>
-                  </>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {data.campaigns.length === 0 ? (
-                <tr>
-                  <td colSpan={8 + extraColCount(platform)} style={{ color: "var(--text-muted)" }}>
-                    Sin campañas para mostrar.
-                  </td>
-                </tr>
-              ) : (
-                data.campaigns.map((c) => (
-                  <tr key={c.accountId + ":" + c.campaignId}>
-                    <td>{c.accountName}</td>
-                    <td>{c.campaignName}</td>
-                    <td className="num">{fmtInt(c.impressions)}</td>
-                    <td className="num">{fmtInt(c.clicks)}</td>
-                    <td className="num">{fmtMoney(c.cpm)}</td>
-                    <td className="num">{c.ctr.toFixed(1)}%</td>
-                    <td className="num">{fmtMoney(c.cpl)}</td>
-                    <td className="num">{fmtInt(c.conversions)}</td>
-                    {platform === "google" && (
-                      <>
-                        <td className="num">{fmtPct(c.searchImpressionShare)}</td>
-                        <td className="num">{fmtScore10(c.qualityScore)}</td>
-                        <td className="num">{fmtPct(c.searchBudgetLostIS)}</td>
-                        <td className="num">{fmtPct(c.searchRankLostIS)}</td>
-                        <td className="num">{fmtPct(c.searchAbsoluteTopIS)}</td>
-                        <td className="num">{fmtPct(c.searchTopIS)}</td>
-                        <td className="num">{fmtPct(c.optimizationScore)}</td>
-                      </>
-                    )}
-                    {(platform === "meta" || platform === "tiktok") && (
-                      <>
-                        <td className="num">{fmtInt(c.reach ?? 0)}</td>
-                        <td className="num">{fmtFreq(c.frequency)}</td>
-                      </>
-                    )}
-                    {platform === "tiktok" && (
-                      <>
-                        <td className="num">{fmtSeconds(c.avgVideoPlaySeconds)}</td>
-                        <td className="num">{fmtInt(c.likes ?? 0)}</td>
-                      </>
-                    )}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+        <h2>Anuncios — {activeLabel}</h2>
+        <div className="card-sub">Un nivel más de detalle que la tabla de campañas — mismas métricas, ahora por pieza individual.</div>
+
+        {data.ads.length === 0 ? (
+          <div style={{ color: "var(--text-muted)", marginTop: 14 }}>Sin anuncios para mostrar.</div>
+        ) : (
+          <div className="ad-grid">
+            {data.ads.map((ad) => (
+              <div className="ad-card" key={ad.accountId + ":" + ad.campaignId + ":" + ad.adId}>
+                <div
+                  className="ad-thumb"
+                  style={
+                    platform !== "google"
+                      ? { background: `linear-gradient(135deg, var(--plat-${platform}), color-mix(in srgb, var(--plat-${platform}) 55%, #000))` }
+                      : undefined
+                  }
+                >
+                  {activeLabel}
+                </div>
+                <div className="ad-body">
+                  <div className="ad-name">{ad.adName}</div>
+                  <div className="ad-meta">{ad.accountName} · {ad.campaignName}</div>
+                  <div className="ad-metric-row"><span>Impresiones</span><span className="num">{fmtInt(ad.impressions)}</span></div>
+                  <div className="ad-metric-row"><span>CTR</span><span className="num">{ad.ctr.toFixed(1)}%</span></div>
+                  <div className="ad-metric-row"><span>CPL</span><span className="num">{fmtMoney(ad.cpl)}</span></div>
+                  <div className="ad-metric-row"><span>Conversiones</span><span className="num">{fmtInt(ad.conversions)}</span></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <footer className="foot">
