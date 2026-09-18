@@ -1,18 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { CampaignsResponse, PlatformKey } from "@/lib/types";
+import type { PlatformComparisonResponse, PlatformKey } from "@/lib/types";
 
-const PLATFORMS: { key: PlatformKey; label: string; varName: string }[] = [
-  { key: "google", label: "Google Ads", varName: "--plat-google" },
-  { key: "meta", label: "Meta Ads", varName: "--plat-meta" },
-  { key: "tiktok", label: "TikTok Ads", varName: "--plat-tiktok" },
-];
+const PLATFORM_VAR: Partial<Record<PlatformKey, string>> = {
+  google: "--plat-google",
+  meta: "--plat-meta",
+  tiktok: "--plat-tiktok",
+  linkedin: "--plat-linkedin",
+};
 
-// Mismo set de presets que la vista de Finanzas (ver DATE_PRESETS en
-// Dashboard.tsx) — duplicado a propósito, no importado de lib/windsor.ts:
-// ese archivo es solo-servidor. "custom" se guarda igual que en Finanzas,
-// pero todavía no hay rango personalizado real conectado — cae a "month".
 type DatePreset = "today" | "yesterday" | "7d" | "14d" | "28d" | "month" | "lastmonth" | "custom";
 const DATE_PRESETS: { key: DatePreset; label: string }[] = [
   { key: "today", label: "Hoy" },
@@ -24,26 +21,19 @@ const DATE_PRESETS: { key: DatePreset; label: string }[] = [
   { key: "lastmonth", label: "Mes anterior" },
 ];
 
-function fmtInt(n: number): string {
-  return Math.round(n).toLocaleString("es-AR");
-}
 function fmtMoney(n: number): string {
   return "$" + Math.round(n).toLocaleString("es-AR");
 }
-function fmtPct(n?: number): string {
-  return n === undefined ? "—" : Math.round(n) + "%";
-}
-function fmtScore10(n?: number): string {
-  return n === undefined ? "—" : n.toFixed(1) + "/10";
+function fmtInt(n: number): string {
+  return Math.round(n).toLocaleString("es-AR");
 }
 
-export default function MediosView() {
-  const [platform, setPlatform] = useState<PlatformKey>("google");
+export default function ComparacionView() {
   const [datePreset, setDatePreset] = useState<DatePreset>("month");
   const [dateMenuOpen, setDateMenuOpen] = useState(false);
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
-  const [data, setData] = useState<CampaignsResponse | null>(null);
+  const [data, setData] = useState<PlatformComparisonResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const dateMenuRef = useRef<HTMLDivElement>(null);
 
@@ -60,35 +50,36 @@ export default function MediosView() {
 
   useEffect(() => {
     setData(null);
-    // "custom" todavía no está conectado (ver nota en el menú de fecha) — se
-    // sigue pidiendo "month" hasta que se implemente el rango personalizado.
     const range = datePreset === "custom" ? "month" : datePreset;
-    fetch(`/api/campaigns?platform=${platform}&range=${range}`)
+    fetch(`/api/platform-comparison?range=${range}`)
       .then((r) => {
         if (!r.ok) throw new Error("HTTP " + r.status);
         return r.json();
       })
-      .then((body: CampaignsResponse) => setData(body))
+      .then((body: PlatformComparisonResponse) => setData(body))
       .catch((err) => setError(String(err?.message || err)));
-  }, [platform, datePreset]);
+  }, [datePreset]);
 
   if (error) {
     return (
       <div className="wrap">
-        <div className="loading-state">No se pudo cargar /api/campaigns: {error}</div>
+        <div className="loading-state">No se pudo cargar /api/platform-comparison: {error}</div>
       </div>
     );
   }
   if (!data) {
     return (
       <div className="wrap">
-        <div className="loading-state">Cargando campañas…</div>
+        <div className="loading-state">Cargando comparación…</div>
       </div>
     );
   }
 
-  const activeLabel = PLATFORMS.find((p) => p.key === platform)?.label ?? platform;
   const dateLabel = DATE_PRESETS.find((d) => d.key === datePreset)?.label ?? "Este mes";
+  const platformsWithCpl = data.platforms.filter((p) => p.cpl > 0);
+  const maxCpl = Math.max(1, ...platformsWithCpl.map((p) => p.cpl));
+  const cheapest = platformsWithCpl.length > 1 ? [...platformsWithCpl].sort((a, b) => a.cpl - b.cpl)[0] : undefined;
+  const priciest = platformsWithCpl.length > 1 ? [...platformsWithCpl].sort((a, b) => b.cpl - a.cpl)[0] : undefined;
 
   return (
     <div className="wrap">
@@ -98,7 +89,7 @@ export default function MediosView() {
           <img src="/brand/taquion-isotipo.png" alt="Taquión" className="brand-mark" width={30} height={30} />
           <div>
             <h1>Pulso Ignite — Medios</h1>
-            <div className="sub">Rendimiento por campaña — equipo Medios, Taquión</div>
+            <div className="sub">¿Dónde está rindiendo mejor la inversión? — equipo Medios, Taquión</div>
           </div>
         </div>
         <a href="/" style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
@@ -107,9 +98,9 @@ export default function MediosView() {
       </header>
 
       <nav className="medios-subnav">
-        <a href="/medios" aria-current="page">Campañas</a>
+        <a href="/medios">Campañas</a>
         <a href="/medios/anuncios">Anuncios</a>
-        <a href="/medios/comparacion">Comparación de plataformas</a>
+        <a href="/medios/comparacion" aria-current="page">Comparación de plataformas</a>
       </nav>
 
       {data.warnings?.map((w, i) => (
@@ -121,7 +112,7 @@ export default function MediosView() {
         <div className="mock-note">
           <span className="tq-arrow">↘</span>{" "}
           <span>
-            <b>Datos de ejemplo.</b> En cuanto haya campañas reales de {activeLabel} en Windsor.ai, se muestran acá.
+            <b>Datos de ejemplo.</b> En cuanto haya cuentas reales conectadas en Windsor.ai, se comparan acá.
           </span>
         </div>
       )}
@@ -178,80 +169,64 @@ export default function MediosView() {
             )}
           </div>
         </div>
-        <div className="chip-row">
-          {PLATFORMS.map((p) => (
-            <button key={p.key} className="chip plat" aria-pressed={platform === p.key} onClick={() => setPlatform(p.key)}>
-              <span className="dot" style={{ background: `var(${p.varName})` }} />
-              {p.label}
-            </button>
-          ))}
-        </div>
       </div>
 
       <div className="card">
-        <h2>Campañas — {activeLabel}</h2>
-        <div className="card-sub">
-          {platform === "google"
-            ? "Métricas comunes + cuota de subasta y calidad, propias de Google Ads."
-            : "Todavía sin conectar — se suma con el mismo mecanismo que Google Ads."}
-        </div>
-        <div className="table-scroll-x" style={{ marginTop: 14 }}>
+        <h2>Costo por resultado (CPL), por plataforma</h2>
+        <div className="card-sub">Barra más corta = más eficiente. Sin conversiones en el período, la plataforma no entra en el gráfico.</div>
+        {platformsWithCpl.length === 0 ? (
+          <div style={{ color: "var(--text-muted)", marginTop: 14 }}>Ninguna plataforma tuvo conversiones en este período.</div>
+        ) : (
+          <div style={{ marginTop: 14 }}>
+            {platformsWithCpl.map((p) => (
+              <div className="plat-compare-row" key={p.platformKey}>
+                <div className="plat-compare-label">
+                  <span className="plat-dot" style={{ background: `var(${PLATFORM_VAR[p.platformKey] ?? "--accent"})` }} />
+                  {p.label}
+                </div>
+                <div className="plat-compare-track">
+                  <div
+                    className="plat-compare-fill"
+                    style={{ width: `${(p.cpl / maxCpl) * 100}%`, background: `var(${PLATFORM_VAR[p.platformKey] ?? "--accent"})` }}
+                  />
+                </div>
+                <div className="plat-compare-cpl num">{fmtMoney(p.cpl)}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        {cheapest && priciest && cheapest.platformKey !== priciest.platformKey && (
+          <div className="insight-box">
+            <b>{cheapest.label}</b> tiene el CPL más bajo este período — {fmtMoney(priciest.cpl - cheapest.cpl)} menos que{" "}
+            <b>{priciest.label}</b>.
+          </div>
+        )}
+      </div>
+
+      <div className="card">
+        <h2>Resumen por plataforma</h2>
+        <div className="table-scroll-x" style={{ marginTop: 10 }}>
           <table className="dense">
             <thead>
               <tr>
-                <th>Cuenta</th>
-                <th>Campaña</th>
-                <th className="num">Impr.</th>
-                <th className="num">Clicks</th>
-                <th className="num">CPM</th>
-                <th className="num">CTR</th>
+                <th>Plataforma</th>
+                <th className="num">Gasto</th>
+                <th className="num">Conversiones</th>
                 <th className="num">CPL</th>
-                <th className="num">Conv.</th>
-                {platform === "google" && (
-                  <>
-                    <th className="num">Cuota impr.</th>
-                    <th className="num">Nivel calidad</th>
-                    <th className="num">Pérd. presup.</th>
-                    <th className="num">Pérd. ranking</th>
-                    <th className="num">Pos. abs.</th>
-                    <th className="num">Pos. superior</th>
-                    <th className="num">Punt. optim.</th>
-                  </>
-                )}
               </tr>
             </thead>
             <tbody>
-              {data.campaigns.length === 0 ? (
-                <tr>
-                  <td colSpan={platform === "google" ? 15 : 8} style={{ color: "var(--text-muted)" }}>
-                    Sin campañas para mostrar.
+              {data.platforms.map((p) => (
+                <tr key={p.platformKey}>
+                  <td>
+                    <span className="plat-dot" style={{ background: `var(${PLATFORM_VAR[p.platformKey] ?? "--accent"})` }} />
+                    {p.label}
                   </td>
+                  <td className="num">{fmtMoney(p.spend)}</td>
+                  <td className="num">{fmtInt(p.conversions)}</td>
+                  <td className="num">{p.cpl > 0 ? fmtMoney(p.cpl) : "—"}</td>
                 </tr>
-              ) : (
-                data.campaigns.map((c) => (
-                  <tr key={c.accountId + ":" + c.campaignId}>
-                    <td>{c.accountName}</td>
-                    <td>{c.campaignName}</td>
-                    <td className="num">{fmtInt(c.impressions)}</td>
-                    <td className="num">{fmtInt(c.clicks)}</td>
-                    <td className="num">{fmtMoney(c.cpm)}</td>
-                    <td className="num">{c.ctr.toFixed(1)}%</td>
-                    <td className="num">{fmtMoney(c.cpl)}</td>
-                    <td className="num">{fmtInt(c.conversions)}</td>
-                    {platform === "google" && (
-                      <>
-                        <td className="num">{fmtPct(c.searchImpressionShare)}</td>
-                        <td className="num">{fmtScore10(c.qualityScore)}</td>
-                        <td className="num">{fmtPct(c.searchBudgetLostIS)}</td>
-                        <td className="num">{fmtPct(c.searchRankLostIS)}</td>
-                        <td className="num">{fmtPct(c.searchAbsoluteTopIS)}</td>
-                        <td className="num">{fmtPct(c.searchTopIS)}</td>
-                        <td className="num">{fmtPct(c.optimizationScore)}</td>
-                      </>
-                    )}
-                  </tr>
-                ))
-              )}
+              ))}
             </tbody>
           </table>
         </div>
@@ -259,7 +234,7 @@ export default function MediosView() {
 
       <footer className="foot">
         <span>Fuente de datos: {data.source === "windsor" ? "Windsor.ai (en vivo)" : "mock"}</span>
-        <span>Perfil Medios — v1, arranca con Google Ads</span>
+        <span>Perfil Medios — comparación entre plataformas conectadas</span>
       </footer>
     </div>
   );
