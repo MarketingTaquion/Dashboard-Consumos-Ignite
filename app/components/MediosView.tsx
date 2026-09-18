@@ -36,6 +36,18 @@ function fmtPct(n?: number): string {
 function fmtScore10(n?: number): string {
   return n === undefined ? "—" : n.toFixed(1) + "/10";
 }
+function fmtFreq(n?: number): string {
+  return n === undefined ? "—" : n.toFixed(1);
+}
+function fmtSeconds(n?: number): string {
+  return n === undefined ? "—" : n.toFixed(1) + "s";
+}
+function extraColCount(platform: PlatformKey): number {
+  if (platform === "google") return 7;
+  if (platform === "meta") return 2;
+  if (platform === "tiktok") return 4;
+  return 0;
+}
 
 export default function MediosView() {
   const [platform, setPlatform] = useState<PlatformKey>("google");
@@ -191,9 +203,9 @@ export default function MediosView() {
       <div className="card">
         <h2>Campañas — {activeLabel}</h2>
         <div className="card-sub">
-          {platform === "google"
-            ? "Métricas comunes + cuota de subasta y calidad, propias de Google Ads."
-            : "Todavía sin conectar — se suma con el mismo mecanismo que Google Ads."}
+          {platform === "google" && "Métricas comunes + cuota de subasta y calidad, propias de Google Ads."}
+          {platform === "meta" && "Métricas comunes + alcance y frecuencia, propias de campañas de alcance/awareness."}
+          {platform === "tiktok" && "Métricas comunes + alcance, frecuencia y video — el formato nativo de la plataforma."}
         </div>
         <div className="table-scroll-x" style={{ marginTop: 14 }}>
           <table className="dense">
@@ -218,12 +230,24 @@ export default function MediosView() {
                     <th className="num">Punt. optim.</th>
                   </>
                 )}
+                {(platform === "meta" || platform === "tiktok") && (
+                  <>
+                    <th className="num">Alcance</th>
+                    <th className="num">Frec.</th>
+                  </>
+                )}
+                {platform === "tiktok" && (
+                  <>
+                    <th className="num">Tiempo prom.</th>
+                    <th className="num">Likes</th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody>
               {data.campaigns.length === 0 ? (
                 <tr>
-                  <td colSpan={platform === "google" ? 15 : 8} style={{ color: "var(--text-muted)" }}>
+                  <td colSpan={8 + extraColCount(platform)} style={{ color: "var(--text-muted)" }}>
                     Sin campañas para mostrar.
                   </td>
                 </tr>
@@ -247,6 +271,18 @@ export default function MediosView() {
                         <td className="num">{fmtPct(c.searchAbsoluteTopIS)}</td>
                         <td className="num">{fmtPct(c.searchTopIS)}</td>
                         <td className="num">{fmtPct(c.optimizationScore)}</td>
+                      </>
+                    )}
+                    {(platform === "meta" || platform === "tiktok") && (
+                      <>
+                        <td className="num">{fmtInt(c.reach ?? 0)}</td>
+                        <td className="num">{fmtFreq(c.frequency)}</td>
+                      </>
+                    )}
+                    {platform === "tiktok" && (
+                      <>
+                        <td className="num">{fmtSeconds(c.avgVideoPlaySeconds)}</td>
+                        <td className="num">{fmtInt(c.likes ?? 0)}</td>
                       </>
                     )}
                   </tr>

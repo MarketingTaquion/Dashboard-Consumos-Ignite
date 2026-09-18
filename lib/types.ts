@@ -57,6 +57,17 @@ export interface CampaignRow {
   searchAbsoluteTopIS?: number; // %, 0-100
   searchTopIS?: number; // %, 0-100
   optimizationScore?: number; // %, 0-100
+  // Comunes a Meta Ads y TikTok Ads — no existen en Google Ads a nivel campaña.
+  reach?: number;
+  frequency?: number; // promedio de veces que una misma persona vio el anuncio
+  // Exclusivas de TikTok Ads. Nota: "quality_ranking"/"engagement_rate_ranking"/
+  // "conversion_rate_ranking" y "% video visto" de Meta Ads quedaron afuera de
+  // esta tabla a propósito — son métricas de ANUNCIO individual en el modelo
+  // de datos real de Meta (un mismo campaign_id agrupa varios ads, cada uno
+  // con su propio ranking; promediarlas o mostrar una sola por campaña sería
+  // engañoso). Van a aparecer en la vista Anuncios de Meta cuando se conecte.
+  avgVideoPlaySeconds?: number;
+  likes?: number;
 }
 
 export interface CampaignsResponse {

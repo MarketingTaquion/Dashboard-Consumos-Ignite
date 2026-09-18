@@ -21,6 +21,7 @@ Esta documentación está organizada según el método **Diátaxis**: cuatro car
 ## Referencia
 - [Estructura del proyecto](./reference/estructura-del-proyecto.md)
 - [API — `GET /api/spend`](./reference/api-spend.md)
+- [APIs de Medios — `/api/campaigns`, `/api/ads`, `/api/platform-comparison`](./reference/api-medios.md)
 - [Variables de entorno](./reference/variables-de-entorno.md)
 - [Tokens de diseño (colores, tipografía)](./reference/design-tokens.md)
 

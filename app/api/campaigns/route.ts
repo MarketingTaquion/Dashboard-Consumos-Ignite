@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { fetchGoogleAdsCampaigns } from "@/lib/windsorCampaigns";
+import { fetchMetaCampaigns } from "@/lib/windsorMeta";
+import { fetchTiktokCampaigns } from "@/lib/windsorTiktok";
 import { hasWindsorCredentials, DATE_RANGE_KEYS, type DateRangeKey } from "@/lib/windsor";
 import { MOCK_CAMPAIGNS } from "@/lib/mockCampaigns";
-import type { CampaignsResponse, PlatformKey } from "@/lib/types";
+import type { CampaignRow, CampaignsResponse, PlatformKey } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +17,20 @@ export const dynamic = "force-dynamic";
 const ALL_PLATFORM_KEYS: PlatformKey[] = ["google", "meta", "tiktok", "linkedin"];
 
 // De esas, cuáles ya tienen fetcher de campañas contra Windsor.ai real.
-const CONNECTED_PLATFORMS: PlatformKey[] = ["google"];
+const CONNECTED_PLATFORMS: PlatformKey[] = ["google", "meta", "tiktok"];
+
+function fetchCampaignsForPlatform(platform: PlatformKey, rangeKey: DateRangeKey): Promise<{ campaigns: CampaignRow[]; warnings: string[] }> {
+  switch (platform) {
+    case "google":
+      return fetchGoogleAdsCampaigns(rangeKey);
+    case "meta":
+      return fetchMetaCampaigns(rangeKey);
+    case "tiktok":
+      return fetchTiktokCampaigns(rangeKey);
+    default:
+      return Promise.resolve({ campaigns: [], warnings: [] });
+  }
+}
 
 function parseRangeParam(request: Request): DateRangeKey {
   const raw = new URL(request.url).searchParams.get("range");
@@ -40,8 +55,8 @@ export async function GET(request: Request) {
   const platform = parsePlatformParam(request);
   const rangeKey = parseRangeParam(request);
 
-  // Plataforma sin fetcher real todavía (Meta, TikTok, LinkedIn): mock
-  // explícito con warning, sin importar si hay API key configurada o no.
+  // Plataforma sin fetcher real todavía (LinkedIn): mock explícito con
+  // warning, sin importar si hay API key configurada o no.
   if (!CONNECTED_PLATFORMS.includes(platform)) {
     return NextResponse.json(notConnectedResponse(platform));
   }
@@ -52,11 +67,11 @@ export async function GET(request: Request) {
   }
 
   try {
-    const { campaigns, warnings } = await fetchGoogleAdsCampaigns(rangeKey);
+    const { campaigns, warnings } = await fetchCampaignsForPlatform(platform, rangeKey);
     const body: CampaignsResponse = {
       source: campaigns.length > 0 ? "windsor" : "mock",
       platform,
-      campaigns: campaigns.length > 0 ? campaigns : MOCK_CAMPAIGNS.google ?? [],
+      campaigns: campaigns.length > 0 ? campaigns : MOCK_CAMPAIGNS[platform] ?? [],
       warnings: warnings.length ? warnings : undefined,
     };
     return NextResponse.json(body);
