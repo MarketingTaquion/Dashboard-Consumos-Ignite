@@ -357,3 +357,47 @@ export async function fetchWindsorSpend(
   );
   return { clients: [...overriddenMockClients, ...allRealClients], warnings };
 }
+
+export interface PlatformTotals {
+  platformKey: PlatformKey;
+  label: string;
+  spend: number;
+  conversions: number;
+  cpl: number;
+  /** Cuántas cuentas se encontraron para esta plataforma (activas o no) — si es 0, no hay nada real que mostrar todavía. */
+  accountCount: number;
+}
+
+/**
+ * Agrega el gasto/conversiones de cada plataforma conectada — para la vista
+ * Medios ("Comparación entre plataformas"). Reutiliza el mismo descubrimiento
+ * de cuentas de `fetchWindsorSpend` (Google/Meta/TikTok ya conectados), así
+ * que sale real desde el día uno: no hace falta un fetcher nuevo por
+ * plataforma, esto ya se prueba a nivel cuenta en la vista Finanzas.
+ */
+export async function fetchPlatformComparison(
+  metricRange: ResolvedDateRange = resolveDateRange("month")
+): Promise<{ platforms: PlatformTotals[]; warnings: string[] }> {
+  const warnings: string[] = [];
+  const platforms: PlatformTotals[] = [];
+
+  for (const source of PLATFORM_SOURCES) {
+    const byAccount = await discoverPlatformAccounts(source, warnings, metricRange);
+    let spend = 0;
+    let conversions = 0;
+    for (const acc of byAccount.values()) {
+      spend += acc.spend;
+      conversions += acc.conversions;
+    }
+    platforms.push({
+      platformKey: source.platformKey,
+      label: source.label,
+      spend,
+      conversions,
+      cpl: conversions > 0 ? spend / conversions : 0,
+      accountCount: byAccount.size,
+    });
+  }
+
+  return { platforms, warnings };
+}

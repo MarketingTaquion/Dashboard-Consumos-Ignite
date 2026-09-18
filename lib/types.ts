@@ -65,3 +65,48 @@ export interface CampaignsResponse {
   campaigns: CampaignRow[];
   warnings?: string[];
 }
+
+/**
+ * Fila de anuncio para la vista Medios — un nivel más profundo que
+ * CampaignRow. Sin métricas de cuota de subasta/calidad: esas son propias
+ * del nivel campaña en Google Ads, no existen por anuncio.
+ */
+export interface AdRow {
+  accountId: string;
+  accountName: string;
+  campaignId: string;
+  campaignName: string;
+  adId: string;
+  adName: string;
+  impressions: number;
+  ctr: number; // %, 0-100
+  cpl: number; // spend / conversions; 0 si conversions es 0
+  conversions: number;
+}
+
+export interface AdsResponse {
+  source: "mock" | "windsor";
+  platform: PlatformKey;
+  ads: AdRow[];
+  warnings?: string[];
+}
+
+/**
+ * Comparación agregada por plataforma (no por cuenta/campaña) — reutiliza
+ * el mismo descubrimiento de cuentas de lib/windsor.ts que ya alimenta la
+ * vista Finanzas, así que las 3 plataformas conectadas (Google/Meta/TikTok)
+ * llegan reales desde el día uno, sin fetcher nuevo por plataforma.
+ */
+export interface PlatformComparisonRow {
+  platformKey: PlatformKey;
+  label: string;
+  spend: number;
+  conversions: number;
+  cpl: number; // spend / conversions; 0 si conversions es 0
+}
+
+export interface PlatformComparisonResponse {
+  source: "mock" | "windsor";
+  platforms: PlatformComparisonRow[];
+  warnings?: string[];
+}
