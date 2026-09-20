@@ -9,22 +9,22 @@ Esta documentación está organizada según el método **Diátaxis**: cuatro car
 | Buscar un dato técnico exacto (una variable de entorno, la forma de la respuesta de la API, un token de diseño) | [`reference/`](./reference/) |
 | Entender el porqué de una decisión (arquitectura de datos, diseño de la UI, estado actual del proyecto) | [`explanation/`](./explanation/) |
 
-## Tutoriales
+## Tutoriales (Tutorials)
 - [Levantar el proyecto por primera vez](./tutorials/getting-started.md)
 
-## Guías (How-To)
+## Guías prácticas (How-To Guides)
 - [Conectar Windsor.ai (Google Ads)](./how-to/conectar-windsor.md) — vía prioritaria
 - [Conectar Google Ads API directo](./how-to/conectar-google-ads.md) — fallback, ver nota en la guía
 - [Deployar a Vercel](./how-to/deploy-a-vercel.md)
 - [Agregar una plataforma nueva al dashboard](./how-to/agregar-una-plataforma.md)
 
-## Referencia
+## Referencia (Reference)
 - [Estructura del proyecto](./reference/estructura-del-proyecto.md)
 - [API — `GET /api/spend`](./reference/api-spend.md)
 - [Variables de entorno](./reference/variables-de-entorno.md)
 - [Tokens de diseño (colores, tipografía)](./reference/design-tokens.md)
 
-## Explicación
+## Explicación (Explanation)
 - [Decisión de arquitectura de datos](./explanation/arquitectura-de-datos.md)
 - [Por qué la UI es una tabla operativa densa](./explanation/diseno-ui-vista-operativa.md)
 - [Estado actual y limitaciones conocidas](./explanation/estado-y-limitaciones.md)

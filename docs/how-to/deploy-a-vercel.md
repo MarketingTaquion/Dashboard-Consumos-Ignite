@@ -43,7 +43,7 @@ Las variables de `.env.local` (ver [referencia de variables de entorno](../refer
 2. Desde la raíz del proyecto: `vercel` (primera vez, configura el proyecto) o `vercel --prod` (deploy directo a producción).
 3. Alternativa sin CLI: en vercel.com → "Add New Project" → importar el repo de GitHub → deploy. Esto configura el mismo flujo automático por push que ya tenemos.
 
-## Troubleshooting
+## Solución de problemas (Troubleshooting)
 
 - **El build falla en Vercel pero funciona local:** revisá que `npm run build` (no solo `npm run dev`) pase local — el modo dev tolera algunos errores de tipos que el build de producción no.
 - **La app funciona pero muestra datos de ejemplo:** las variables de entorno de esa integración no están cargadas en Vercel, o están incompletas — ver [Conectar Google Ads](./conectar-google-ads.md).

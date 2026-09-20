@@ -4,7 +4,7 @@
 
 `export const dynamic = "force-dynamic"` — nunca se cachea, cada request recalcula.
 
-## Query params
+## Parámetros de consulta (Query Params)
 
 | Param | Valores | Default | Descripción |
 |---|---|---|---|

@@ -10,12 +10,12 @@ Dashboard interno de Taquión para monitorear consumo de pauta publicitaria mult
 
 La documentación completa vive en [`docs/`](./docs/index.md), organizada por lo que necesites en el momento:
 
-- **[Tutoriales](./docs/tutorials/)** — levantar el proyecto por primera vez.
-- **[Guías (How-To)](./docs/how-to/)** — conectar Google Ads, deployar a Vercel, agregar una plataforma nueva.
-- **[Referencia](./docs/reference/)** — estructura del proyecto, API, variables de entorno, tokens de diseño.
-- **[Explicación](./docs/explanation/)** — por qué la arquitectura de datos es así, por qué la UI es una tabla operativa densa, estado y limitaciones actuales.
+- **[Tutoriales (Tutorials)](./docs/tutorials/)** — levantar el proyecto por primera vez.
+- **[Guías prácticas (How-To Guides)](./docs/how-to/)** — conectar Google Ads, deployar a Vercel, agregar una plataforma nueva.
+- **[Referencia (Reference)](./docs/reference/)** — estructura del proyecto, API, variables de entorno, tokens de diseño.
+- **[Explicación (Explanation)](./docs/explanation/)** — por qué la arquitectura de datos es así, por qué la UI es una tabla operativa densa, estado y limitaciones actuales.
 
-## Quick start
+## Inicio rápido (Quick Start)
 
 ```bash
 npm install
