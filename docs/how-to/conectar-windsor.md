@@ -8,9 +8,9 @@ Esta es la vía **prioritaria** sobre la integración directa a Google Ads API (
 
 Con solo `WINDSOR_API_KEY`, `/api/spend` trae **todas** las cuentas de Google Ads que Windsor.ai tenga conectadas y las muestra como filas propias — nombre real, gasto real, $0 incluido si corresponde. `lib/windsor.ts` las descubre en 3 capas, cada una cubre lo que la anterior no puede ver:
 
-1. **Mes en curso** — spend y conversiones reales.
-2. **Últimos 12 meses** — encuentra cuentas con actividad vieja pero nada este mes (Windsor no manda una fila con spend $0, directamente omite la cuenta si no tuvo ningún evento en el rango pedido).
-3. **Endpoint de cuentas conectadas** de Windsor.ai — encuentra cuentas que nunca tuvieron ni un solo evento (ej. sin campañas creadas todavía).
+1. **El período elegido en el selector de fecha** (mes en curso por defecto) — spend y conversiones reales.
+2. **Ventana ampliada, derivada de ese mismo período** (ver `discoveryWindowFor` en `lib/windsor.ts` — nunca una constante fija como "12 meses", corregido 2026-09-22 a pedido explícito: el selector de período es el que delimita toda ventana temporal del dashboard) — encuentra cuentas con actividad reciente pero nada en el período elegido (Windsor no manda una fila con spend $0, directamente omite la cuenta si no tuvo ningún evento en el rango pedido).
+3. **Endpoint de cuentas conectadas** de Windsor.ai — encuentra cuentas que nunca tuvieron ni un solo evento (ej. sin campañas creadas todavía). Esta capa es metadata sin fecha, no depende del período elegido.
 
 Las capas 2 y 3 solo aportan el nombre de la cuenta; si no tuvo actividad este mes, el gasto queda en $0. **En cuanto hay al menos una cuenta real, los 4 clientes mock (Norte Fintech, Andes Turismo, Terra Realty, MetroVoz) desaparecen de la vista** — dejan de aportar una vez que hay datos reales. Si Windsor no tiene ninguna cuenta conectada (o falla la consulta), se sigue mostrando el mock completo, para que la tabla nunca quede vacía.
 
@@ -72,7 +72,7 @@ Sin presupuesto cargado, el estado queda en "Sin objetivo cargado" en vez de fab
 
 ## Si algo no funciona
 
-Las 3 capas de descubrimiento (mes en curso, 12 meses, endpoint de cuentas conectadas) ya están verificadas contra la cuenta real de Taquión (2026-09-10) — ver la nota al principio de [`lib/windsor.ts`](../../lib/windsor.ts). Si de todas formas una cuenta no aparece, revisá el banner de warning: cada una de las 3 capas avisa explícitamente si falla, en vez de fallar en silencio. Para inspeccionar una respuesta real a mano:
+Las 3 capas de descubrimiento (período elegido, ventana ampliada derivada de ese período, endpoint de cuentas conectadas) ya están verificadas contra la cuenta real de Taquión (2026-09-10) — ver la nota al principio de [`lib/windsor.ts`](../../lib/windsor.ts). Si de todas formas una cuenta no aparece, revisá el banner de warning: cada una de las 3 capas avisa explícitamente si falla, en vez de fallar en silencio. Para inspeccionar una respuesta real a mano:
 
 ```
 https://connectors.windsor.ai/google_ads?api_key=TU_KEY&fields=account_id,account_name,date,spend&date_from=2026-09-01&date_to=2026-09-10

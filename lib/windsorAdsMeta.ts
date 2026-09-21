@@ -2,30 +2,39 @@ import type { AdRow } from "./types";
 import { resolveDateRange, discoveryWindowFor, type DateRangeKey } from "./windsor";
 
 /**
- * Datos a nivel ANUNCIO (no campaña) para la vista Medios — ver Artifact
- * "Pulso Ignite — Perfil Medios", artboard "Anuncios". Mismo patrón que
- * lib/windsorCampaigns.ts, un nivel más profundo: agrega account/campaign +
- * ad_id/ad_name. Arranca solo con Google Ads.
+ * Datos a nivel ANUNCIO para Meta Ads (Medios) — mismo patrón que
+ * lib/windsorAds.ts (Google Ads): capa núcleo + descubrimiento (ventana
+ * derivada del período elegido, ver discoveryWindowFor en lib/windsor.ts),
+ * agrupado por account/campaign/ad.
  *
- * `ad_id`/`ad_name` verificados como campos existentes contra la
- * documentación pública de Windsor (windsor.ai/data-field/google_ads/,
- * 2026-09-17) antes de escribir este archivo — mismo cuidado que ya costó
- * un HTTP 400 a nivel campaña. Sin verificar todavía en una respuesta real
- * si conviven en el mismo reporte que spend/conversions/impressions/clicks
- * (si Windsor devuelve "no report in common", hace falta separarlos en una
- * capa aparte, igual que se hizo con search_budget_lost_impression_share).
+ * Timeout explícito de LAYER_TIMEOUT_MS por layer — verificado en vivo
+ * 2026-09-21: esta consulta se quedó colgada indefinidamente en el preview
+ * (probable causa: a nivel anuncio hay muchas más filas por cuenta que a
+ * nivel campaña, una por creatividad).
  *
- * Sin métricas de cuota de subasta/calidad acá: esas son del reporte de
- * campaña de Google Ads, no existen a nivel anuncio individual.
+ * `ad_id`/`ad_name` verificados contra windsor.ai/data-field/facebook/
+ * (2026-09-17) antes de escribir este archivo. Mismo cuidado que ya costó
+ * un bug real a nivel campaña (lib/windsorMeta.ts): acá también el nombre
+ * de CAMPAÑA es el campo `campaign`, no `campaign_name` — confirmado en esa
+ * misma pasada. `ad_name` sí se llama así (no hay variante rara para ads).
+ *
+ * Sin cuota de subasta/calidad ni rankings acá tampoco — esas métricas
+ * (quality_ranking, engagement_rate_ranking, conversion_rate_ranking, %
+ * video visto) SÍ son de nivel anuncio en el modelo de Meta (a diferencia de
+ * Google), así que en teoría podrían sumarse acá en una futura iteración —
+ * quedan afuera de esta primera versión para no repetir el mismo patrón de
+ * "campo nuevo, otra capa, otro riesgo de incompatibilidad" sin haber
+ * verificado antes que el núcleo (spend/impresiones/clicks por anuncio)
+ * funciona solo.
  *
  * SOLO SERVER-SIDE.
  */
 
 const WINDSOR_BASE_URL = "https://connectors.windsor.ai";
-const CONNECTOR = "google_ads";
+const CONNECTOR = "facebook";
 
-const JOIN_FIELDS = "account_id,account_name,campaign_id,campaign_name,ad_id,ad_name,date";
-const DISCOVERY_FIELDS = "account_id,account_name,campaign_id,campaign_name,ad_id,ad_name";
+const JOIN_FIELDS = "account_id,account_name,campaign_id,campaign,ad_id,ad_name,date";
+const DISCOVERY_FIELDS = "account_id,account_name,campaign_id,campaign,ad_id,ad_name";
 const CORE_FIELDS = `${JOIN_FIELDS},spend,conversions,impressions,clicks`;
 
 interface Accum {
@@ -54,7 +63,8 @@ function getOrCreate(byAd: Map<string, Accum>, row: any): Accum | null {
       accountId,
       accountName: String(row.account_name ?? accountId),
       campaignId,
-      campaignName: String(row.campaign_name ?? campaignId),
+      // "campaign" es el nombre real del campo en el connector "facebook" — ver nota arriba.
+      campaignName: String(row.campaign ?? campaignId),
       adId,
       adName: String(row.ad_name ?? adId),
       impressions: 0,
@@ -68,10 +78,15 @@ function getOrCreate(byAd: Map<string, Accum>, row: any): Accum | null {
   return acc;
 }
 
-// Timeout explícito — ver la nota en lib/windsorAdsMeta.ts: la misma
-// consulta de anuncios de Meta se quedó colgada en vivo. Se aplica el mismo
-// resguardo acá por las dudas, sin evidencia de que Google tenga el mismo
-// problema (ya viene funcionando bien en vivo).
+// Timeout explícito — verificado en vivo 2026-09-21: la consulta de
+// anuncios de Meta se quedó colgada indefinidamente en el preview (nunca
+// resolvió ni tiró error). Sin logs de runtime disponibles para confirmar
+// la causa exacta, pero la sospecha más fuerte es la capa de descubrimiento
+// (a nivel anuncio hay órdenes de magnitud más filas por cuenta que a nivel
+// campaña, que sí viene funcionando bien — una por creatividad). 8s deja
+// margen de sobra dentro del límite de duración de una función de Vercel y
+// evita que un layer lento cuelgue toda la request en vez de avisar y
+// seguir con lo que haya.
 const LAYER_TIMEOUT_MS = 8000;
 
 async function fetchLayer(fields: string, dateFrom: string, dateTo: string): Promise<any[]> {
@@ -96,14 +111,13 @@ async function fetchLayer(fields: string, dateFrom: string, dateTo: string): Pro
   }
 }
 
-export async function fetchGoogleAdsAds(rangeKey: DateRangeKey = "month"): Promise<{ ads: AdRow[]; warnings: string[] }> {
+export async function fetchMetaAds(rangeKey: DateRangeKey = "month"): Promise<{ ads: AdRow[]; warnings: string[] }> {
   const warnings: string[] = [];
   if (!process.env.WINDSOR_API_KEY) return { ads: [], warnings };
 
   const range = resolveDateRange(rangeKey);
   const byAd = new Map<string, Accum>();
 
-  // Capa 1 — núcleo. Si esta falla, no hay nada que mostrar: se corta acá.
   try {
     const rows = await fetchLayer(CORE_FIELDS, range.dateFrom, range.dateTo);
     for (const row of rows) {
@@ -116,16 +130,16 @@ export async function fetchGoogleAdsAds(rangeKey: DateRangeKey = "month"): Promi
       acc.conversions += Number(row.conversions ?? 0);
     }
   } catch (err: any) {
-    warnings.push(`Windsor.ai (Google Ads, anuncios): falló la consulta principal. Detalle: ${err?.message || err}`);
+    warnings.push(`Windsor.ai (Meta Ads, anuncios): falló la consulta principal. Detalle: ${err?.message || err}`);
     return { ads: [], warnings };
   }
 
   // Descubrimiento — ventana derivada del período elegido (ver
-  // discoveryWindowFor en lib/windsor.ts), solo identificadores. Mismo
-  // problema ya resuelto a nivel cuenta y campaña: un anuncio pausado/sin
-  // actividad en el período elegido no vendría en la capa 1 (Windsor omite
-  // la fila en vez de mandarla en $0), y desaparecería en vez de mostrar $0
-  // real.
+  // discoveryWindowFor en lib/windsor.ts). Corrección 2026-09-22: esto
+  // reemplaza una ventana fija de 90 días que había quedado acá como
+  // mitigación de un cuelgue en vivo — el período elegido es el que debe
+  // delimitar toda ventana temporal, no una constante aparte; el timeout
+  // explícito de LAYER_TIMEOUT_MS ya cubre el caso de una consulta lenta.
   try {
     const discovery = discoveryWindowFor(range);
     const rows = await fetchLayer(DISCOVERY_FIELDS, discovery.dateFrom, discovery.dateTo);
@@ -135,12 +149,12 @@ export async function fetchGoogleAdsAds(rangeKey: DateRangeKey = "month"): Promi
     }
   } catch (err: any) {
     warnings.push(
-      `Windsor.ai (Google Ads, anuncios): no se pudo consultar el histórico ampliado para descubrir anuncios sin actividad. Detalle: ${err?.message || err}`
+      `Windsor.ai (Meta Ads, anuncios): no se pudo consultar el histórico ampliado para descubrir anuncios sin actividad. Detalle: ${err?.message || err}`
     );
   }
 
   if (byAd.size === 0) {
-    warnings.push(`Windsor.ai (Google Ads, anuncios): no se encontró ningún anuncio conectado, ni con actividad ni sin ella, en la ventana de descubrimiento del período elegido.`);
+    warnings.push(`Windsor.ai (Meta Ads, anuncios): no se encontró ningún anuncio conectado, ni con actividad ni sin ella, en la ventana de descubrimiento del período elegido.`);
     return { ads: [], warnings };
   }
 

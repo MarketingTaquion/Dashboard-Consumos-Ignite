@@ -2,27 +2,28 @@ import type { AdRow } from "./types";
 import { resolveDateRange, discoveryWindowFor, type DateRangeKey } from "./windsor";
 
 /**
- * Datos a nivel ANUNCIO (no campaña) para la vista Medios — ver Artifact
- * "Pulso Ignite — Perfil Medios", artboard "Anuncios". Mismo patrón que
- * lib/windsorCampaigns.ts, un nivel más profundo: agrega account/campaign +
- * ad_id/ad_name. Arranca solo con Google Ads.
+ * Datos a nivel ANUNCIO para TikTok Ads (Medios) — mismo patrón que
+ * lib/windsorAds.ts (Google Ads): capa núcleo + descubrimiento (ventana
+ * derivada del período elegido, ver discoveryWindowFor en lib/windsor.ts),
+ * agrupado por account/campaign/ad. Mismo timeout explícito de
+ * LAYER_TIMEOUT_MS que Meta (ver lib/windsorAdsMeta.ts) por las dudas, sin
+ * evidencia todavía de que TikTok tenga el mismo problema de cuelgue.
  *
- * `ad_id`/`ad_name` verificados como campos existentes contra la
- * documentación pública de Windsor (windsor.ai/data-field/google_ads/,
- * 2026-09-17) antes de escribir este archivo — mismo cuidado que ya costó
- * un HTTP 400 a nivel campaña. Sin verificar todavía en una respuesta real
- * si conviven en el mismo reporte que spend/conversions/impressions/clicks
- * (si Windsor devuelve "no report in common", hace falta separarlos en una
- * capa aparte, igual que se hizo con search_budget_lost_impression_share).
+ * `ad_id`/`ad_name` verificados contra windsor.ai/data-field/tiktok/
+ * (2026-09-17) antes de escribir este archivo. A diferencia de Meta,
+ * `campaign_name` sí existe con ese nombre exacto acá (ver
+ * lib/windsorTiktok.ts) — no hace falta el field alternativo que usa Meta.
  *
- * Sin métricas de cuota de subasta/calidad acá: esas son del reporte de
- * campaña de Google Ads, no existen a nivel anuncio individual.
+ * Sin tiempo de reproducción/likes acá: esas métricas (average_video_play,
+ * likes) están confirmadas a nivel CAMPAÑA (ver lib/windsorTiktok.ts), sin
+ * confirmar todavía si Windsor las expone también agregadas por anuncio
+ * individual — se suman en una futura iteración si hace falta.
  *
  * SOLO SERVER-SIDE.
  */
 
 const WINDSOR_BASE_URL = "https://connectors.windsor.ai";
-const CONNECTOR = "google_ads";
+const CONNECTOR = "tiktok";
 
 const JOIN_FIELDS = "account_id,account_name,campaign_id,campaign_name,ad_id,ad_name,date";
 const DISCOVERY_FIELDS = "account_id,account_name,campaign_id,campaign_name,ad_id,ad_name";
@@ -69,9 +70,9 @@ function getOrCreate(byAd: Map<string, Accum>, row: any): Accum | null {
 }
 
 // Timeout explícito — ver la nota en lib/windsorAdsMeta.ts: la misma
-// consulta de anuncios de Meta se quedó colgada en vivo. Se aplica el mismo
-// resguardo acá por las dudas, sin evidencia de que Google tenga el mismo
-// problema (ya viene funcionando bien en vivo).
+// consulta de anuncios (a nivel anuncio, no campaña) se quedó colgada en
+// vivo para Meta. Se aplica el mismo resguardo acá por las dudas, sin
+// evidencia todavía de que TikTok tenga el mismo problema.
 const LAYER_TIMEOUT_MS = 8000;
 
 async function fetchLayer(fields: string, dateFrom: string, dateTo: string): Promise<any[]> {
@@ -96,14 +97,13 @@ async function fetchLayer(fields: string, dateFrom: string, dateTo: string): Pro
   }
 }
 
-export async function fetchGoogleAdsAds(rangeKey: DateRangeKey = "month"): Promise<{ ads: AdRow[]; warnings: string[] }> {
+export async function fetchTiktokAds(rangeKey: DateRangeKey = "month"): Promise<{ ads: AdRow[]; warnings: string[] }> {
   const warnings: string[] = [];
   if (!process.env.WINDSOR_API_KEY) return { ads: [], warnings };
 
   const range = resolveDateRange(rangeKey);
   const byAd = new Map<string, Accum>();
 
-  // Capa 1 — núcleo. Si esta falla, no hay nada que mostrar: se corta acá.
   try {
     const rows = await fetchLayer(CORE_FIELDS, range.dateFrom, range.dateTo);
     for (const row of rows) {
@@ -116,16 +116,12 @@ export async function fetchGoogleAdsAds(rangeKey: DateRangeKey = "month"): Promi
       acc.conversions += Number(row.conversions ?? 0);
     }
   } catch (err: any) {
-    warnings.push(`Windsor.ai (Google Ads, anuncios): falló la consulta principal. Detalle: ${err?.message || err}`);
+    warnings.push(`Windsor.ai (TikTok Ads, anuncios): falló la consulta principal. Detalle: ${err?.message || err}`);
     return { ads: [], warnings };
   }
 
   // Descubrimiento — ventana derivada del período elegido (ver
-  // discoveryWindowFor en lib/windsor.ts), solo identificadores. Mismo
-  // problema ya resuelto a nivel cuenta y campaña: un anuncio pausado/sin
-  // actividad en el período elegido no vendría en la capa 1 (Windsor omite
-  // la fila en vez de mandarla en $0), y desaparecería en vez de mostrar $0
-  // real.
+  // discoveryWindowFor en lib/windsor.ts).
   try {
     const discovery = discoveryWindowFor(range);
     const rows = await fetchLayer(DISCOVERY_FIELDS, discovery.dateFrom, discovery.dateTo);
@@ -135,12 +131,12 @@ export async function fetchGoogleAdsAds(rangeKey: DateRangeKey = "month"): Promi
     }
   } catch (err: any) {
     warnings.push(
-      `Windsor.ai (Google Ads, anuncios): no se pudo consultar el histórico ampliado para descubrir anuncios sin actividad. Detalle: ${err?.message || err}`
+      `Windsor.ai (TikTok Ads, anuncios): no se pudo consultar el histórico ampliado para descubrir anuncios sin actividad. Detalle: ${err?.message || err}`
     );
   }
 
   if (byAd.size === 0) {
-    warnings.push(`Windsor.ai (Google Ads, anuncios): no se encontró ningún anuncio conectado, ni con actividad ni sin ella, en la ventana de descubrimiento del período elegido.`);
+    warnings.push(`Windsor.ai (TikTok Ads, anuncios): no se encontró ningún anuncio conectado, ni con actividad ni sin ella, en la ventana de descubrimiento del período elegido.`);
     return { ads: [], warnings };
   }
 

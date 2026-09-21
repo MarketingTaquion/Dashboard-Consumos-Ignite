@@ -33,12 +33,16 @@ import { fetchMediaPlanBudgetByAccount } from "./mediaPlan";
  *   puntual, cae al mismo mejor-esfuerzo silencioso que ya tiene cada capa.
  *
  * Descubrimiento de cuentas en 3 capas, por cada plataforma conectada, cada
- * una cubre lo que la anterior no puede: (1) mes en curso, con
- * spend/conversiones reales; (2) últimos 12 meses, solo para encontrar
- * cuentas con actividad vieja pero nada este mes; (3) endpoint de cuentas
- * conectadas, para las que nunca tuvieron ni un evento. Las capas 2 y 3 solo
- * aportan el nombre — spend/conversiones quedan en 0 si no aparecieron en la
- * capa 1.
+ * una cubre lo que la anterior no puede: (1) el período elegido en el
+ * selector de fecha, con spend/conversiones reales; (2) una ventana ampliada
+ * — SIEMPRE derivada de ese mismo período, ver `discoveryWindowFor` — para
+ * encontrar cuentas con actividad reciente pero nada en el período elegido;
+ * (3) endpoint de cuentas conectadas, para las que nunca tuvieron ni un
+ * evento. Las capas 2 y 3 solo aportan el nombre — spend/conversiones quedan
+ * en 0 si no aparecieron en la capa 1. Corrección 2026-09-22: la capa 2
+ * tenía una ventana fija de 12 meses, desconectada de lo que el usuario
+ * elige en el selector de período — el período elegido es el que debe
+ * delimitar toda ventana temporal del dashboard, no una constante aparte.
  *
  * ENFOQUE: no requiere mapear cliente↔cuenta de antemano. Trae **todas** las
  * cuentas de cada plataforma conectada en Windsor.ai (hoy: Google Ads, Meta
@@ -159,6 +163,32 @@ export function resolveDateRange(key: DateRangeKey, now: Date = new Date()): Res
   }
 }
 
+function parseISODate(s: string): Date {
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+/**
+ * Ventana de "descubrimiento" (para encontrar cuentas/campañas/anuncios
+ * pausados o sin actividad en el rango elegido, que Windsor omitiría en
+ * silencio en vez de devolver en $0) — SIEMPRE derivada del rango elegido
+ * en el selector de período, nunca una constante fija (12 meses, 90 días,
+ * etc.) desconectada de lo que el usuario configuró ahí. Corrección
+ * explícita 2026-09-22: antes cada fetcher tenía su propia ventana
+ * hardcodeada, independiente del filtro de período — el filtro de período
+ * es el que delimita toda ventana temporal en el dashboard, no otra cosa.
+ *
+ * Se extiende el rango elegido hacia atrás por su propio largo (el doble
+ * de días, terminando en el mismo `dateTo`) — así "Hoy" descubre apenas 2
+ * días hacia atrás y "Este mes" descubre ~2 meses, proporcional en los dos
+ * casos a lo que el usuario pidió ver, en vez de un número mágico fijo.
+ */
+export function discoveryWindowFor(range: ResolvedDateRange): { dateFrom: string; dateTo: string } {
+  const from = parseISODate(range.dateFrom);
+  const widened = new Date(from.getFullYear(), from.getMonth(), from.getDate() - range.daysInPeriod);
+  return { dateFrom: toISODate(widened), dateTo: range.dateTo };
+}
+
 interface AccountTotals {
   accountId: string;
   accountName: string;
@@ -195,9 +225,7 @@ async function discoverPlatformAccounts(
   metricRange: ResolvedDateRange
 ): Promise<Map<string, AccountTotals>> {
   const { connector, label } = source;
-  const now = new Date();
-  const today = toISODate(now);
-  const yearAgo = toISODate(new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()));
+  const discovery = discoveryWindowFor(metricRange);
 
   const byAccount = new Map<string, AccountTotals>();
 
@@ -219,17 +247,18 @@ async function discoverPlatformAccounts(
     warnings.push(`Windsor.ai (${label}): falló la consulta del rango de fecha elegido. Detalle: ${err?.message || err}`);
   }
 
-  // Capa 2: últimos 12 meses, solo para descubrir cuentas sin actividad este
-  // mes (Windsor no manda una fila con spend "0", omite la cuenta directamente).
+  // Capa 2: ventana de descubrimiento derivada del período elegido (ver
+  // discoveryWindowFor) — para cuentas sin actividad en ese período (Windsor
+  // no manda una fila con spend "0", omite la cuenta directamente).
   try {
-    const historyRows = await fetchRows(connector, yearAgo, today, "account_id,account_name");
+    const historyRows = await fetchRows(connector, discovery.dateFrom, discovery.dateTo, "account_id,account_name");
     for (const row of historyRows) {
       const accountId = String(row.account_id ?? "");
       if (!accountId || byAccount.has(accountId)) continue;
       byAccount.set(accountId, { accountId, accountName: String(row.account_name ?? accountId), spend: 0, conversions: 0 });
     }
   } catch (err: any) {
-    warnings.push(`Windsor.ai (${label}): no se pudo consultar el histórico de 12 meses. Detalle: ${err?.message || err}`);
+    warnings.push(`Windsor.ai (${label}): no se pudo consultar el histórico ampliado (${discovery.dateFrom} → ${discovery.dateTo}). Detalle: ${err?.message || err}`);
   }
 
   // Capa 3: endpoint de cuentas conectadas (metadata, no datos de campaña) —
@@ -257,7 +286,7 @@ async function discoverPlatformAccounts(
   }
 
   if (byAccount.size === 0) {
-    warnings.push(`Windsor.ai (${label}): no se encontró ninguna cuenta conectada con datos en el último año.`);
+    warnings.push(`Windsor.ai (${label}): no se encontró ninguna cuenta conectada con datos en la ventana de descubrimiento del período elegido.`);
   }
 
   return byAccount;
@@ -273,10 +302,10 @@ async function discoverPlatformAccounts(
  *
  * `metricRange` fija el período real que se le pide a Windsor (por defecto,
  * mes en curso) — ver `resolveDateRange`. El descubrimiento de cuentas sin
- * actividad en ese período (capas 2 y 3 de `discoverPlatformAccounts`) sigue
- * siendo siempre de los últimos 12 meses / metadata de cuentas, sin importar
- * el rango elegido: existen para saber qué cuentas existen, no para el
- * número que se muestra.
+ * actividad en ese período (capa 2 de `discoverPlatformAccounts`) usa una
+ * ventana ampliada pero SIEMPRE derivada del mismo `metricRange` (ver
+ * `discoveryWindowFor`) — nunca una constante fija de fecha; la capa 3
+ * (endpoint de cuentas conectadas) es metadata sin fecha, no le aplica esto.
  */
 export async function fetchWindsorSpend(
   baseClients: ClientData[],
