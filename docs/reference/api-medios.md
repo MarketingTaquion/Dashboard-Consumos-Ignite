@@ -25,7 +25,7 @@ Los 3 comparten el mismo patrón: **Capa 1** (núcleo: spend/conversions/impress
 
 - **`facebook` no tiene `campaign_name`** — el nombre de campaña se llama simplemente **`campaign`**. Es el único de los 3 connectors así; copiar `campaign_name` de Google/TikTok sin revisar deja la columna "Campaña" vacía en silencio para Meta.
 - **TikTok no expone "% video visto" ni "vistas de 6 segundos"** para campañas de video estándar — esas variantes (`ix_video_views_p100`, etc.) solo existen para anuncios "Instant Experience", un formato distinto. Por eso el catálogo real de columnas de TikTok quedó en Alcance/Frecuencia/Tiempo prom. (`average_video_play`)/Likes, sin esas dos.
-- **Los rankings de Meta (`quality_ranking`, `engagement_rate_ranking`, `conversion_rate_ranking`) y el % de video visto (`video_p100_watched_actions_video_view`) son métricas de ANUNCIO**, no de campaña — un mismo `campaign_id` agrupa varios ads, cada uno con su propio ranking. Por eso no están en la tabla de Campañas de Meta; van a aparecer cuando se conecte el nivel Anuncios de Meta.
+- **Los rankings de Meta (`quality_ranking`, `engagement_rate_ranking`, `conversion_rate_ranking`) y el % de video visto (`video_p100_watched_actions_video_view`) son métricas de ANUNCIO**, no de campaña — un mismo `campaign_id` agrupa varios ads, cada uno con su propio ranking. Por eso no están en la tabla de Campañas de Meta ni tampoco en la primera versión de Anuncios de Meta (ver abajo) — quedaron marcadas como posible siguiente iteración, no perdidas.
 
 ### `CampaignRow` (tipo completo en [`lib/types.ts`](../../lib/types.ts))
 
@@ -37,9 +37,17 @@ Campos comunes a las 3 plataformas: `accountId/Name`, `campaignId/Name`, `impres
 
 ## `GET /api/ads` — nivel anuncio
 
-Mismos query params que `/api/campaigns`. Solo **Google Ads** conectado por ahora (`lib/windsorAds.ts`, mismo patrón de 2 capas). `ad_id`/`ad_name` verificados contra `windsor.ai/data-field/google_ads/` antes de escribir el fetcher — sin verificar todavía si conviven en el mismo reporte que spend/impresiones en una respuesta real (ver nota al principio del archivo).
+Mismos query params que `/api/campaigns`. `CONNECTED_PLATFORMS` en [`app/api/ads/route.ts`](../../app/api/ads/route.ts): hoy **Google Ads, Meta Ads y TikTok Ads** (LinkedIn cae a mock con warning). Mismo patrón de 2 capas (núcleo + descubrimiento de 12 meses) que a nivel campaña, un archivo por plataforma:
 
-Tipo `AdRow`: `accountId/Name`, `campaignId/Name`, `adId/Name`, `impressions`, `ctr`, `cpl`, `conversions`. Sin métricas de subasta/calidad — esas son del reporte de campaña de Google Ads, no existen a nivel anuncio individual.
+| Plataforma | Fetcher | Connector Windsor |
+|---|---|---|
+| Google Ads | [`lib/windsorAds.ts`](../../lib/windsorAds.ts) | `google_ads` |
+| Meta Ads | [`lib/windsorAdsMeta.ts`](../../lib/windsorAdsMeta.ts) | `facebook` |
+| TikTok Ads | [`lib/windsorAdsTiktok.ts`](../../lib/windsorAdsTiktok.ts) | `tiktok` |
+
+`ad_id`/`ad_name` verificados contra `windsor.ai/data-field/<connector>/` de cada uno antes de escribir los fetchers. Meta repite la misma trampa que a nivel campaña: el nombre de campaña ahí es `campaign`, no `campaign_name` (`windsorAdsMeta.ts` ya lo tiene en cuenta).
+
+Tipo `AdRow` (igual para las 3 plataformas, sin campos exclusivos): `accountId/Name`, `campaignId/Name`, `adId/Name`, `impressions`, `ctr`, `cpl`, `conversions`. Sin cuota de subasta/calidad (Google) ni rankings/% video visto (Meta) — quedaron fuera de esta primera versión de Anuncios a propósito, ver la nota arriba y el comentario al principio de `windsorAdsMeta.ts`.
 
 ## `GET /api/platform-comparison` — agregado por plataforma
 

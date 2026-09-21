@@ -1,15 +1,30 @@
 import { NextResponse } from "next/server";
 import { fetchGoogleAdsAds } from "@/lib/windsorAds";
+import { fetchMetaAds } from "@/lib/windsorAdsMeta";
+import { fetchTiktokAds } from "@/lib/windsorAdsTiktok";
 import { hasWindsorCredentials, DATE_RANGE_KEYS, type DateRangeKey } from "@/lib/windsor";
 import { MOCK_ADS } from "@/lib/mockAds";
-import type { AdsResponse, PlatformKey } from "@/lib/types";
+import type { AdRow, AdsResponse, PlatformKey } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 // Mismo criterio que app/api/campaigns/route.ts: ALL_PLATFORM_KEYS valida el
 // query param, CONNECTED_PLATFORMS dice cuáles ya tienen fetcher real.
 const ALL_PLATFORM_KEYS: PlatformKey[] = ["google", "meta", "tiktok", "linkedin"];
-const CONNECTED_PLATFORMS: PlatformKey[] = ["google"];
+const CONNECTED_PLATFORMS: PlatformKey[] = ["google", "meta", "tiktok"];
+
+function fetchAdsForPlatform(platform: PlatformKey, rangeKey: DateRangeKey): Promise<{ ads: AdRow[]; warnings: string[] }> {
+  switch (platform) {
+    case "google":
+      return fetchGoogleAdsAds(rangeKey);
+    case "meta":
+      return fetchMetaAds(rangeKey);
+    case "tiktok":
+      return fetchTiktokAds(rangeKey);
+    default:
+      return Promise.resolve({ ads: [], warnings: [] });
+  }
+}
 
 function parseRangeParam(request: Request): DateRangeKey {
   const raw = new URL(request.url).searchParams.get("range");
@@ -44,11 +59,11 @@ export async function GET(request: Request) {
   }
 
   try {
-    const { ads, warnings } = await fetchGoogleAdsAds(rangeKey);
+    const { ads, warnings } = await fetchAdsForPlatform(platform, rangeKey);
     const body: AdsResponse = {
       source: ads.length > 0 ? "windsor" : "mock",
       platform,
-      ads: ads.length > 0 ? ads : MOCK_ADS.google ?? [],
+      ads: ads.length > 0 ? ads : MOCK_ADS[platform] ?? [],
       warnings: warnings.length ? warnings : undefined,
     };
     return NextResponse.json(body);
