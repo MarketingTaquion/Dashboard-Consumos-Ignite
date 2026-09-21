@@ -83,6 +83,22 @@ export async function fetchMediaPlanTargets(): Promise<{ targets: MediaPlanTarge
       }))
       .filter((t) => t.cuenta && t.mes);
 
+    // Diagnóstico: la consulta no tiró error, pero no hay ninguna fila
+    // utilizable — dos causas bien distintas que sin esto quedan indistinguibles
+    // desde afuera (las dos terminan en "$0 / Sin objetivo cargado" en silencio).
+    if (targets.length === 0) {
+      if (rows.length === 0) {
+        return {
+          targets: [],
+          warning: `Hoja de proyectados (Windsor.ai / Google Sheets): la consulta no devolvió ninguna fila — revisar que el Google Sheet esté conectado como fuente de datos en Windsor.ai (connector "googlesheets").`,
+        };
+      }
+      return {
+        targets: [],
+        warning: `Hoja de proyectados (Windsor.ai / Google Sheets): se leyeron ${rows.length} fila(s), pero ninguna tenía "cuenta" y "mes" completos — revisar que los encabezados de la hoja sean exactamente cliente/plataforma/mes/cuenta/presupuesto_proyectado (sin espacios ni mayúsculas distintas).`,
+      };
+    }
+
     return { targets };
   } catch (err: any) {
     return {
@@ -101,10 +117,25 @@ export async function fetchMediaPlanBudgetByAccount(
   now: Date = new Date()
 ): Promise<{ byAccount: Map<string, number>; warning?: string }> {
   const { targets, warning } = await fetchMediaPlanTargets();
+  if (warning) return { byAccount: new Map(), warning };
+
   const monthKeys = currentMonthKeys(now);
   const byAccount = new Map<string, number>();
   targets.forEach((t) => {
     if (monthKeys.includes(t.mes)) byAccount.set(t.cuenta, t.presupuesto);
   });
-  return { byAccount, warning };
+
+  // Hay filas leídas, pero ninguna es del mes actual — la sospecha más
+  // probable es que Google Sheets no se sincroniza en vivo en cada request
+  // (como el resto de los connectors de Windsor, en el plan Basic es una
+  // vez al día): si se acaba de editar la hoja, puede tardar en reflejarse.
+  if (byAccount.size === 0) {
+    const mesesEncontrados = [...new Set(targets.map((t) => t.mes))].filter(Boolean);
+    return {
+      byAccount,
+      warning: `Hoja de proyectados: se leyeron ${targets.length} fila(s) de Windsor.ai, pero ninguna es del mes actual (se esperaba "${monthKeys[0]}"). Meses encontrados en la hoja: ${mesesEncontrados.join(", ") || "ninguno"}. Si la hoja se editó recién, puede ser que Windsor todavía no resincronizó.`,
+    };
+  }
+
+  return { byAccount };
 }
