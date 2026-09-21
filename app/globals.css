@@ -280,3 +280,37 @@ footer.foot { margin-top: 26px; padding-top: 16px; border-top: 1px solid var(--b
 footer.foot code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
 
 .loading-state { padding: 60px 0; text-align: center; color: var(--text-muted); }
+
+/* Sub-navegación entre las 3 vistas de Medios (Campañas / Anuncios / Comparación) */
+.medios-subnav { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 4px 0 20px; }
+.medios-subnav a {
+  padding: 9px 4px; font-size: 13px; font-weight: 600; color: var(--text-muted);
+  border-bottom: 2px solid transparent; text-decoration: none; margin-right: 18px;
+}
+.medios-subnav a:hover { color: var(--text-primary); }
+.medios-subnav a[aria-current="page"] { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* Vista Anuncios — grilla de tarjetas */
+.ad-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 16px; margin-top: 14px; }
+.ad-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.ad-thumb {
+  height: 110px; display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  background: linear-gradient(135deg, var(--plat-google), color-mix(in srgb, var(--plat-google) 55%, #000));
+}
+.ad-body { padding: 12px 14px 14px; }
+.ad-name { font-weight: 700; font-size: 13px; margin-bottom: 8px; }
+.ad-meta { font-size: 11px; color: var(--text-muted); margin-bottom: 8px; }
+.ad-metric-row { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; border-top: 1px solid var(--border); }
+.ad-metric-row:first-of-type { border-top: none; }
+.ad-metric-row span:first-child { color: var(--text-muted); }
+
+/* Vista Comparación — barras de CPL por plataforma */
+.plat-compare-row { display: flex; align-items: center; gap: 14px; padding: 14px 0; border-top: 1px solid var(--border); }
+.plat-compare-row:first-of-type { border-top: none; }
+.plat-compare-label { width: 110px; font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.plat-compare-track { flex: 1; height: 22px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+.plat-compare-fill { height: 100%; border-radius: 4px; }
+.plat-compare-cpl { width: 90px; text-align: right; font-size: 13px; flex-shrink: 0; }
+.insight-box { background: var(--surface-2); border-radius: 8px; padding: 12px 14px; font-size: 12.5px; color: var(--text-secondary); margin-top: 14px; }
+.insight-box b { color: var(--text-primary); }
