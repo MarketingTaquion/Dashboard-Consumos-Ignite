@@ -70,17 +70,32 @@ function toISODate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+// Timeout explícito — ver la nota en lib/windsorAdsMeta.ts: la misma
+// consulta de anuncios (a nivel anuncio, no campaña) se quedó colgada en
+// vivo para Meta. Se aplica el mismo resguardo acá por las dudas, sin
+// evidencia todavía de que TikTok tenga el mismo problema.
+const LAYER_TIMEOUT_MS = 8000;
+
 async function fetchLayer(fields: string, dateFrom: string, dateTo: string): Promise<any[]> {
   const params = new URLSearchParams({ api_key: process.env.WINDSOR_API_KEY!, fields, date_from: dateFrom, date_to: dateTo });
-  const res = await fetch(`${WINDSOR_BASE_URL}/${CONNECTOR}?${params.toString()}`, { cache: "no-store" });
-  if (!res.ok) {
-    const t = await res.text().catch(() => "");
-    throw new Error(`HTTP ${res.status} — ${t.slice(0, 300)}`);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), LAYER_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${WINDSOR_BASE_URL}/${CONNECTOR}?${params.toString()}`, { cache: "no-store", signal: controller.signal });
+    if (!res.ok) {
+      const t = await res.text().catch(() => "");
+      throw new Error(`HTTP ${res.status} — ${t.slice(0, 300)}`);
+    }
+    const json = await res.json();
+    const rows = Array.isArray(json) ? json : json?.data;
+    if (!Array.isArray(rows)) throw new Error("Respuesta inesperada de Windsor.ai (ni array ni { data: [...] })");
+    return rows;
+  } catch (err: any) {
+    if (err?.name === "AbortError") throw new Error(`Timeout de ${LAYER_TIMEOUT_MS / 1000}s consultando Windsor.ai`);
+    throw err;
+  } finally {
+    clearTimeout(timeout);
   }
-  const json = await res.json();
-  const rows = Array.isArray(json) ? json : json?.data;
-  if (!Array.isArray(rows)) throw new Error("Respuesta inesperada de Windsor.ai (ni array ni { data: [...] })");
-  return rows;
 }
 
 export async function fetchTiktokAds(rangeKey: DateRangeKey = "month"): Promise<{ ads: AdRow[]; warnings: string[] }> {

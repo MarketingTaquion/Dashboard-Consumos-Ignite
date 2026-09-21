@@ -76,17 +76,37 @@ function toISODate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+// Timeout explícito — verificado en vivo 2026-09-21: la consulta de
+// anuncios de Meta se quedó colgada indefinidamente en el preview (nunca
+// resolvió ni tiró error). Sin logs de runtime disponibles para confirmar
+// la causa exacta, pero la sospecha más fuerte es la capa de descubrimiento
+// (12 meses, TODOS los ad_id de la cuenta) — a nivel anuncio hay órdenes de
+// magnitud más filas que a nivel campaña, que sí viene funcionando bien.
+// 8s deja margen de sobra dentro del límite de duración de una función de
+// Vercel y evita que un layer lento cuelgue toda la request en vez de
+// avisar y seguir con lo que haya.
+const LAYER_TIMEOUT_MS = 8000;
+
 async function fetchLayer(fields: string, dateFrom: string, dateTo: string): Promise<any[]> {
   const params = new URLSearchParams({ api_key: process.env.WINDSOR_API_KEY!, fields, date_from: dateFrom, date_to: dateTo });
-  const res = await fetch(`${WINDSOR_BASE_URL}/${CONNECTOR}?${params.toString()}`, { cache: "no-store" });
-  if (!res.ok) {
-    const t = await res.text().catch(() => "");
-    throw new Error(`HTTP ${res.status} — ${t.slice(0, 300)}`);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), LAYER_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${WINDSOR_BASE_URL}/${CONNECTOR}?${params.toString()}`, { cache: "no-store", signal: controller.signal });
+    if (!res.ok) {
+      const t = await res.text().catch(() => "");
+      throw new Error(`HTTP ${res.status} — ${t.slice(0, 300)}`);
+    }
+    const json = await res.json();
+    const rows = Array.isArray(json) ? json : json?.data;
+    if (!Array.isArray(rows)) throw new Error("Respuesta inesperada de Windsor.ai (ni array ni { data: [...] })");
+    return rows;
+  } catch (err: any) {
+    if (err?.name === "AbortError") throw new Error(`Timeout de ${LAYER_TIMEOUT_MS / 1000}s consultando Windsor.ai`);
+    throw err;
+  } finally {
+    clearTimeout(timeout);
   }
-  const json = await res.json();
-  const rows = Array.isArray(json) ? json : json?.data;
-  if (!Array.isArray(rows)) throw new Error("Respuesta inesperada de Windsor.ai (ni array ni { data: [...] })");
-  return rows;
 }
 
 export async function fetchMetaAds(rangeKey: DateRangeKey = "month"): Promise<{ ads: AdRow[]; warnings: string[] }> {
@@ -112,22 +132,29 @@ export async function fetchMetaAds(rangeKey: DateRangeKey = "month"): Promise<{ 
     return { ads: [], warnings };
   }
 
+  // 90 días en vez de los 12 meses que usan las capas de descubrimiento de
+  // campaña — a nivel anuncio hay muchas más filas por cuenta (cada
+  // variante/creatividad es su propio ad_id), y esta capa fue la que colgó
+  // la consulta en vivo. 90 días sigue cubriendo "anuncio pausado hace
+  // poco"; uno pausado hace más de 90 días no va a aparecer con $0 — un
+  // trade-off deliberado hasta confirmar si el timeout de arriba solo ya
+  // alcanza para bajar la ventana completa a 12 meses de nuevo.
   try {
     const now = new Date();
-    const yearAgo = toISODate(new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()));
-    const rows = await fetchLayer(DISCOVERY_FIELDS, yearAgo, toISODate(now));
+    const ninetyDaysAgo = toISODate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 90));
+    const rows = await fetchLayer(DISCOVERY_FIELDS, ninetyDaysAgo, toISODate(now));
     for (const row of rows) {
       const acc = getOrCreate(byAd, row);
       if (acc) acc.hasCore = true;
     }
   } catch (err: any) {
     warnings.push(
-      `Windsor.ai (Meta Ads, anuncios): no se pudo consultar el histórico de 12 meses para descubrir anuncios sin actividad. Detalle: ${err?.message || err}`
+      `Windsor.ai (Meta Ads, anuncios): no se pudo consultar el histórico de 90 días para descubrir anuncios sin actividad. Detalle: ${err?.message || err}`
     );
   }
 
   if (byAd.size === 0) {
-    warnings.push(`Windsor.ai (Meta Ads, anuncios): no se encontró ningún anuncio conectado, ni con actividad ni sin ella, en el último año.`);
+    warnings.push(`Windsor.ai (Meta Ads, anuncios): no se encontró ningún anuncio conectado, ni con actividad ni sin ella, en los últimos 90 días.`);
     return { ads: [], warnings };
   }
 
