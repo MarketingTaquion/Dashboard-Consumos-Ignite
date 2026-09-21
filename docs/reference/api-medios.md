@@ -19,7 +19,7 @@ Las 3 rutas que consumen `MediosView.tsx`, `AnunciosView.tsx` y `ComparacionView
 | Meta Ads | [`lib/windsorMeta.ts`](../../lib/windsorMeta.ts) | `facebook` |
 | TikTok Ads | [`lib/windsorTiktok.ts`](../../lib/windsorTiktok.ts) | `tiktok` |
 
-Los 3 comparten el mismo patrón: **Capa 1** (núcleo: spend/conversions/impressions/clicks del rango elegido) + **Capa Descubrimiento** (últimos 12 meses, solo identificadores, para que una campaña pausada/sin actividad en el rango elegido muestre $0 real en vez de desaparecer — Windsor omite la fila en vez de mandarla en 0). Google Ads además tiene 2 capas más para sus métricas de subasta/calidad (ver el comentario al principio de `windsorCampaigns.ts` — Windsor las agrupa en "reportes" separados, HTTP 400 si se piden todas juntas).
+Los 3 comparten el mismo patrón: **Capa 1** (núcleo: spend/conversions/impressions/clicks del rango elegido) + **Capa Descubrimiento** (ventana ampliada pero SIEMPRE derivada del mismo rango elegido — ver `discoveryWindowFor` en [`lib/windsor.ts`](../../lib/windsor.ts) — solo identificadores, para que una campaña pausada/sin actividad en el rango elegido muestre $0 real en vez de desaparecer — Windsor omite la fila en vez de mandarla en 0). Google Ads además tiene 2 capas más para sus métricas de subasta/calidad (ver el comentario al principio de `windsorCampaigns.ts` — Windsor las agrupa en "reportes" separados, HTTP 400 si se piden todas juntas).
 
 ### Trampas de nombres de campo encontradas al verificar contra `windsor.ai/data-field/<connector>/`
 
@@ -37,7 +37,7 @@ Campos comunes a las 3 plataformas: `accountId/Name`, `campaignId/Name`, `impres
 
 ## `GET /api/ads` — nivel anuncio
 
-Mismos query params que `/api/campaigns`. `CONNECTED_PLATFORMS` en [`app/api/ads/route.ts`](../../app/api/ads/route.ts): hoy **Google Ads, Meta Ads y TikTok Ads** (LinkedIn cae a mock con warning). Mismo patrón de 2 capas (núcleo + descubrimiento de 12 meses) que a nivel campaña, un archivo por plataforma:
+Mismos query params que `/api/campaigns`. `CONNECTED_PLATFORMS` en [`app/api/ads/route.ts`](../../app/api/ads/route.ts): hoy **Google Ads, Meta Ads y TikTok Ads** (LinkedIn cae a mock con warning). Mismo patrón de 2 capas (núcleo + descubrimiento, ventana derivada del período elegido) que a nivel campaña, un archivo por plataforma. Cada layer tiene un timeout explícito de 8s (`LAYER_TIMEOUT_MS`) — verificado en vivo que sin esto una consulta lenta puede colgar la request entera en vez de degradar con un warning.
 
 | Plataforma | Fetcher | Connector Windsor |
 |---|---|---|

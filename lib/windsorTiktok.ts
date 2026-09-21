@@ -1,5 +1,5 @@
 import type { CampaignRow } from "./types";
-import { resolveDateRange, type DateRangeKey } from "./windsor";
+import { resolveDateRange, discoveryWindowFor, type DateRangeKey } from "./windsor";
 
 /**
  * Datos a nivel CAMPAÑA para TikTok Ads (Medios) — mismo patrón que
@@ -75,10 +75,6 @@ function getOrCreate(byCampaign: Map<string, Accum>, row: any): Accum | null {
   return acc;
 }
 
-function toISODate(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-
 async function fetchLayer(fields: string, dateFrom: string, dateTo: string): Promise<any[]> {
   const params = new URLSearchParams({ api_key: process.env.WINDSOR_API_KEY!, fields, date_from: dateFrom, date_to: dateTo });
   const res = await fetch(`${WINDSOR_BASE_URL}/${CONNECTOR}?${params.toString()}`, { cache: "no-store" });
@@ -131,26 +127,26 @@ export async function fetchTiktokCampaigns(rangeKey: DateRangeKey = "month"): Pr
     return { campaigns: [], warnings };
   }
 
-  // Descubrimiento — últimos 12 meses, solo identificadores. Mismo problema
-  // ya resuelto en Google Ads: una campaña pausada/sin actividad en el
-  // período elegido no vendría en la capa 1, y desaparecería en vez de
-  // mostrar $0 real.
+  // Descubrimiento — ventana derivada del período elegido (ver
+  // discoveryWindowFor en lib/windsor.ts), solo identificadores. Mismo
+  // problema ya resuelto en Google Ads: una campaña pausada/sin actividad
+  // en el período elegido no vendría en la capa 1, y desaparecería en vez
+  // de mostrar $0 real.
   try {
-    const now = new Date();
-    const yearAgo = toISODate(new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()));
-    const rows = await fetchLayer(DISCOVERY_FIELDS, yearAgo, toISODate(now));
+    const discovery = discoveryWindowFor(range);
+    const rows = await fetchLayer(DISCOVERY_FIELDS, discovery.dateFrom, discovery.dateTo);
     for (const row of rows) {
       const acc = getOrCreate(byCampaign, row);
       if (acc) acc.hasCore = true;
     }
   } catch (err: any) {
     warnings.push(
-      `Windsor.ai (TikTok Ads, campañas): no se pudo consultar el histórico de 12 meses para descubrir campañas sin actividad. Detalle: ${err?.message || err}`
+      `Windsor.ai (TikTok Ads, campañas): no se pudo consultar el histórico ampliado para descubrir campañas sin actividad. Detalle: ${err?.message || err}`
     );
   }
 
   if (byCampaign.size === 0) {
-    warnings.push(`Windsor.ai (TikTok Ads, campañas): no se encontró ninguna campaña conectada, ni con actividad ni sin ella, en el último año.`);
+    warnings.push(`Windsor.ai (TikTok Ads, campañas): no se encontró ninguna campaña conectada, ni con actividad ni sin ella, en la ventana de descubrimiento del período elegido.`);
     return { campaigns: [], warnings };
   }
 

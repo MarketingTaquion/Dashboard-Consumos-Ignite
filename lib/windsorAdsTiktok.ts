@@ -1,10 +1,13 @@
 import type { AdRow } from "./types";
-import { resolveDateRange, type DateRangeKey } from "./windsor";
+import { resolveDateRange, discoveryWindowFor, type DateRangeKey } from "./windsor";
 
 /**
  * Datos a nivel ANUNCIO para TikTok Ads (Medios) — mismo patrón que
- * lib/windsorAds.ts (Google Ads): capa núcleo + descubrimiento de 12 meses,
- * agrupado por account/campaign/ad.
+ * lib/windsorAds.ts (Google Ads): capa núcleo + descubrimiento (ventana
+ * derivada del período elegido, ver discoveryWindowFor en lib/windsor.ts),
+ * agrupado por account/campaign/ad. Mismo timeout explícito de
+ * LAYER_TIMEOUT_MS que Meta (ver lib/windsorAdsMeta.ts) por las dudas, sin
+ * evidencia todavía de que TikTok tenga el mismo problema de cuelgue.
  *
  * `ad_id`/`ad_name` verificados contra windsor.ai/data-field/tiktok/
  * (2026-09-17) antes de escribir este archivo. A diferencia de Meta,
@@ -66,10 +69,6 @@ function getOrCreate(byAd: Map<string, Accum>, row: any): Accum | null {
   return acc;
 }
 
-function toISODate(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-
 // Timeout explícito — ver la nota en lib/windsorAdsMeta.ts: la misma
 // consulta de anuncios (a nivel anuncio, no campaña) se quedó colgada en
 // vivo para Meta. Se aplica el mismo resguardo acá por las dudas, sin
@@ -121,22 +120,23 @@ export async function fetchTiktokAds(rangeKey: DateRangeKey = "month"): Promise<
     return { ads: [], warnings };
   }
 
+  // Descubrimiento — ventana derivada del período elegido (ver
+  // discoveryWindowFor en lib/windsor.ts).
   try {
-    const now = new Date();
-    const yearAgo = toISODate(new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()));
-    const rows = await fetchLayer(DISCOVERY_FIELDS, yearAgo, toISODate(now));
+    const discovery = discoveryWindowFor(range);
+    const rows = await fetchLayer(DISCOVERY_FIELDS, discovery.dateFrom, discovery.dateTo);
     for (const row of rows) {
       const acc = getOrCreate(byAd, row);
       if (acc) acc.hasCore = true;
     }
   } catch (err: any) {
     warnings.push(
-      `Windsor.ai (TikTok Ads, anuncios): no se pudo consultar el histórico de 12 meses para descubrir anuncios sin actividad. Detalle: ${err?.message || err}`
+      `Windsor.ai (TikTok Ads, anuncios): no se pudo consultar el histórico ampliado para descubrir anuncios sin actividad. Detalle: ${err?.message || err}`
     );
   }
 
   if (byAd.size === 0) {
-    warnings.push(`Windsor.ai (TikTok Ads, anuncios): no se encontró ningún anuncio conectado, ni con actividad ni sin ella, en el último año.`);
+    warnings.push(`Windsor.ai (TikTok Ads, anuncios): no se encontró ningún anuncio conectado, ni con actividad ni sin ella, en la ventana de descubrimiento del período elegido.`);
     return { ads: [], warnings };
   }
 

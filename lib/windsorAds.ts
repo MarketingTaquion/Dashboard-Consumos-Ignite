@@ -1,5 +1,5 @@
 import type { AdRow } from "./types";
-import { resolveDateRange, type DateRangeKey } from "./windsor";
+import { resolveDateRange, discoveryWindowFor, type DateRangeKey } from "./windsor";
 
 /**
  * Datos a nivel ANUNCIO (no campaña) para la vista Medios — ver Artifact
@@ -68,10 +68,6 @@ function getOrCreate(byAd: Map<string, Accum>, row: any): Accum | null {
   return acc;
 }
 
-function toISODate(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-
 // Timeout explícito — ver la nota en lib/windsorAdsMeta.ts: la misma
 // consulta de anuncios de Meta se quedó colgada en vivo. Se aplica el mismo
 // resguardo acá por las dudas, sin evidencia de que Google tenga el mismo
@@ -124,26 +120,27 @@ export async function fetchGoogleAdsAds(rangeKey: DateRangeKey = "month"): Promi
     return { ads: [], warnings };
   }
 
-  // Descubrimiento — últimos 12 meses, solo identificadores. Mismo problema
-  // ya resuelto a nivel cuenta y campaña: un anuncio pausado/sin actividad
-  // en el período elegido no vendría en la capa 1 (Windsor omite la fila en
-  // vez de mandarla en $0), y desaparecería en vez de mostrar $0 real.
+  // Descubrimiento — ventana derivada del período elegido (ver
+  // discoveryWindowFor en lib/windsor.ts), solo identificadores. Mismo
+  // problema ya resuelto a nivel cuenta y campaña: un anuncio pausado/sin
+  // actividad en el período elegido no vendría en la capa 1 (Windsor omite
+  // la fila en vez de mandarla en $0), y desaparecería en vez de mostrar $0
+  // real.
   try {
-    const now = new Date();
-    const yearAgo = toISODate(new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()));
-    const rows = await fetchLayer(DISCOVERY_FIELDS, yearAgo, toISODate(now));
+    const discovery = discoveryWindowFor(range);
+    const rows = await fetchLayer(DISCOVERY_FIELDS, discovery.dateFrom, discovery.dateTo);
     for (const row of rows) {
       const acc = getOrCreate(byAd, row);
       if (acc) acc.hasCore = true;
     }
   } catch (err: any) {
     warnings.push(
-      `Windsor.ai (Google Ads, anuncios): no se pudo consultar el histórico de 12 meses para descubrir anuncios sin actividad. Detalle: ${err?.message || err}`
+      `Windsor.ai (Google Ads, anuncios): no se pudo consultar el histórico ampliado para descubrir anuncios sin actividad. Detalle: ${err?.message || err}`
     );
   }
 
   if (byAd.size === 0) {
-    warnings.push(`Windsor.ai (Google Ads, anuncios): no se encontró ningún anuncio conectado, ni con actividad ni sin ella, en el último año.`);
+    warnings.push(`Windsor.ai (Google Ads, anuncios): no se encontró ningún anuncio conectado, ni con actividad ni sin ella, en la ventana de descubrimiento del período elegido.`);
     return { ads: [], warnings };
   }
 
