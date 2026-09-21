@@ -222,8 +222,11 @@ export default function AnunciosView() {
                   {activeLabel}
                 </div>
                 <div className="ad-body">
-                  <div className="ad-name">{ad.adName}</div>
-                  <div className="ad-meta">{ad.accountName} · {ad.campaignName}</div>
+                  <div className="ad-name" title={ad.adName}>{ad.adName}</div>
+                  <div className="ad-meta">
+                    <span title={ad.accountName}>{ad.accountName}</span>
+                    <span className="ad-meta-campaign" title={ad.campaignName}>{ad.campaignName}</span>
+                  </div>
                   <div className="ad-metric-row"><span>Impresiones</span><span className="num">{fmtInt(ad.impressions)}</span></div>
                   <div className="ad-metric-row"><span>CTR</span><span className="num">{ad.ctr.toFixed(1)}%</span></div>
                   <div className="ad-metric-row"><span>CPL</span><span className="num">{fmtMoney(ad.cpl)}</span></div>
