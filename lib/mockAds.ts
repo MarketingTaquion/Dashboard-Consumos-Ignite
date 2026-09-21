@@ -46,6 +46,74 @@ const GOOGLE_ADS: AdRow[] = [
   },
 ];
 
+const META_ADS: AdRow[] = [
+  {
+    accountId: "mock-norte",
+    accountName: "Norte Fintech",
+    campaignId: "m1",
+    campaignName: "Reels — Awareness",
+    adId: "ma1",
+    adName: "Reel — \"Empezá a invertir\" v1",
+    impressions: 62400,
+    ctr: 2.8,
+    cpl: 710,
+    conversions: 16,
+  },
+  {
+    accountId: "mock-norte",
+    accountName: "Norte Fintech",
+    campaignId: "m1",
+    campaignName: "Reels — Awareness",
+    adId: "ma2",
+    adName: "Reel — \"Empezá a invertir\" v2 (testimonio)",
+    impressions: 78100,
+    ctr: 1.9,
+    cpl: 1180,
+    conversions: 11,
+  },
+  {
+    accountId: "mock-andes",
+    accountName: "Andes Turismo",
+    campaignId: "m2",
+    campaignName: "Feed — Conversión",
+    adId: "ma3",
+    adName: "Feed — \"3 pasos para tu próximo viaje\"",
+    impressions: 43700,
+    ctr: 3.4,
+    cpl: 540,
+    conversions: 11,
+  },
+];
+
+const TIKTOK_ADS: AdRow[] = [
+  {
+    accountId: "mock-norte",
+    accountName: "Norte Fintech",
+    campaignId: "t1",
+    campaignName: "In-Feed — Marca",
+    adId: "ta1",
+    adName: "In-Feed — \"Tu plata, en movimiento\"",
+    impressions: 118300,
+    ctr: 1.7,
+    cpl: 1340,
+    conversions: 14,
+  },
+  {
+    accountId: "mock-andes",
+    accountName: "Andes Turismo",
+    campaignId: "t2",
+    campaignName: "TopView — Lanzamiento",
+    adId: "ta2",
+    adName: "TopView — \"Tu próximo destino empieza acá\"",
+    impressions: 204600,
+    ctr: 2.9,
+    cpl: 870,
+    conversions: 33,
+  },
+];
+
 export const MOCK_ADS: Partial<Record<PlatformKey, AdRow[]>> = {
   google: GOOGLE_ADS,
+  meta: META_ADS,
+  tiktok: TIKTOK_ADS,
 };
