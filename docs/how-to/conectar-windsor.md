@@ -28,11 +28,16 @@ Las cuentas reales aparecen con `$0` de objetivo y "Sin objetivo cargado" hasta 
 | `cuenta` | el `account_id` real tal cual aparece en Windsor.ai — es lo que cruza esta fila con la cuenta real del dashboard | `6551720043` |
 | `presupuesto_proyectado` | número plano, sin `$` ni separador de miles | `1200000` |
 
-Para conectarla: en Windsor.ai → **Add data** → **Google Sheets** → compartir la hoja como *Viewer* con el service account que te muestra la pantalla → pegar el link de la hoja → **Add Account**. No hace falta ninguna variable de entorno nueva — usa la misma `WINDSOR_API_KEY`.
+Para conectarla, son **2 pasos** en Windsor.ai — los dos hacen falta, no alcanza con el primero:
+
+1. **Add data → Google Sheets**: compartir la hoja como *Viewer* con el service account que muestra la pantalla → pegar el link de la hoja → **Add Account**.
+2. **Preview and Destination**: revisar la preview de filas reales y **seleccionar explícitamente** las 5 columnas (`cliente`, `plataforma`, `mes`, `cuenta`, `presupuesto_proyectado`) en la lista de "Fields" → confirmar. Sin este paso, la hoja queda "agregada" pero Windsor sigue devolviendo 0 filas para esos campos — verificado en vivo 2026-09-21.
+
+No hace falta ninguna variable de entorno nueva — usa la misma `WINDSOR_API_KEY`. La consulta en `lib/mediaPlan.ts` sí necesita `date_from`/`date_to` (un año hacia atrás) para traer algo — sin fecha, Windsor devuelve 0 filas aunque la hoja esté bien conectada; las filas de la hoja no tienen una noción de fecha propia, así que un rango amplio no filtra nada real, solo evita que la consulta vuelva vacía.
 
 Sin ninguna fila para una cuenta en el mes en curso, esa cuenta se queda en `$0` / "Sin objetivo cargado" — igual que antes, nunca se inventa un número.
 
-Esas cuentas reales todavía no tienen presupuesto/objetivo cargado (no hay media plan asociado) — el "Objetivo" sale en `$0` y el estado en "Sin objetivo cargado" hasta que exista ese dato (ver [estado y limitaciones](../explanation/estado-y-limitaciones.md)).
+Esas cuentas reales todavía no tienen presupuesto cargado (no hay media plan asociado) — "Presupuesto proyectado" sale en `$0` y el estado en "Sin objetivo cargado" hasta que exista ese dato (ver [estado y limitaciones](../explanation/estado-y-limitaciones.md)).
 
 `WINDSOR_GOOGLE_ADS_ACCOUNT_MAP` queda como mecanismo **opcional** para el caso contrario: si ya sabés que una cuenta real corresponde a uno de los clientes mock, podés pisar el spend de ese cliente puntual en vez de que aparezca como fila nueva (`cliente_interno:account_id`, ver [referencia de variables de entorno](../reference/variables-de-entorno.md)).
 
@@ -56,12 +61,14 @@ Esas cuentas reales todavía no tienen presupuesto/objetivo cargado (no hay medi
 - Deberías ver una fila nueva por cada cuenta real conectada en Windsor.ai, con su nombre real.
 - Si algo falla, vas a ver un banner de advertencia amarillo con el mensaje de error específico (la app cae a mock, no se rompe entera).
 
-**El dato real es siempre el que devuelve Windsor.ai, $0 incluido — sin excepción y sin fallback a mock ni avisos por cada cero.** La columna "Real" muestra dos cosas distintas según el tipo de fila, y ambas son intencionales:
+**El dato real es siempre el que devuelve Windsor.ai, $0 incluido — sin excepción y sin fallback a mock ni avisos por cada cero.** La tabla de Finanzas muestra 4 cosas puntuales por cliente×plataforma (a pedido explícito del usuario, ver historial de `specs/003-dashboard-consumos.md`), todas derivadas del par `budget`/`spend8` — no de `cpl`, que es otra métrica (costo por resultado) que esta tabla ya no muestra:
 
-- **Cuenta real nueva (sin mapeo, la mayoría):** muestra el **gasto total** de la cuenta — coincide directo con el "Costo" que ves en Google Ads. La columna "Plataforma" lo aclara con `(Gasto)` al lado.
-- **Cliente mock con cuenta mapeada vía `WINDSOR_GOOGLE_ADS_ACCOUNT_MAP`:** muestra el **CPL** (`spend / conversiones`) — porque ese cliente ya tiene un objetivo de CPL cargado (del media plan mock) contra el cual comparar.
+- **Presupuesto proyectado** — `budget`. `$0` sin media plan cargado para esa cuenta.
+- **Real** — `spend8`, el gasto real acumulado a la fecha de corte, siempre el mismo concepto sin importar el tipo de fila (cuenta real nueva o cliente mock).
+- **Ritmo de consumo** — `spend8 / budget`, en %.
+- **Remanente** — `budget - spend8` (negativo si se pasó del presupuesto).
 
-No las confundas: $457.653 de gasto total y $5.637 de costo por conversión pueden ser, los dos, el número "correcto" de la misma cuenta — depende de qué pregunta estás haciendo.
+Sin presupuesto cargado, el estado queda en "Sin objetivo cargado" en vez de fabricar un pacing con `budget = 0`.
 
 ## Si algo no funciona
 
