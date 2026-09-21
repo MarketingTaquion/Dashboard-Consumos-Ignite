@@ -58,9 +58,20 @@ export async function fetchMediaPlanTargets(): Promise<{ targets: MediaPlanTarge
   if (!process.env.WINDSOR_API_KEY) return { targets: [] };
 
   try {
+    // A diferencia de los demás fetchers de este proyecto (Google/Meta/TikTok
+    // Ads), esta consulta no tenía date_from/date_to — verificado en vivo
+    // 2026-09-21: sin un rango de fecha, Windsor devuelve 0 filas incluso con
+    // la hoja bien conectada y con datos (aunque las filas de la hoja no
+    // tengan una noción de fecha propia — Windsor igual filtra por su propio
+    // "data_fetched_at"). Se pide un año hacia atrás por las dudas de que el
+    // próximo sync no sea inmediato.
+    const now = new Date();
+    const yearAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
     const params = new URLSearchParams({
       api_key: process.env.WINDSOR_API_KEY,
       fields: "cliente,plataforma,mes,cuenta,presupuesto_proyectado",
+      date_from: yearAgo.toISOString().slice(0, 10),
+      date_to: now.toISOString().slice(0, 10),
     });
     const res = await fetch(`${WINDSOR_BASE_URL}/${SHEETS_CONNECTOR}?${params.toString()}`, { cache: "no-store" });
     if (!res.ok) {
