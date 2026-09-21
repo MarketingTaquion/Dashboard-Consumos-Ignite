@@ -108,7 +108,7 @@ const DATE_PRESETS: { key: DatePreset; label: string }[] = [
   { key: "lastmonth", label: "Mes anterior" },
 ];
 
-type SortKey = "pacing" | "objetivo" | "real" | "delta";
+type SortKey = "pacing" | "presupuesto" | "real" | "remanente";
 interface SortState {
   key: SortKey;
   dir: "asc" | "desc";
@@ -121,10 +121,9 @@ interface Row {
   platLabel: string;
   platVar: string;
   pacingPct: number;
-  target: number;
-  real: number;
-  deltaPct: number;
-  label: string;
+  budget: number;
+  spend: number;
+  remaining: number;
   prevPct?: number;
   statusKey: Status["key"];
   statusLabel: string;
@@ -148,7 +147,7 @@ export default function Dashboard() {
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [bannerOpen, setBannerOpen] = useState(false);
-  const [sort, setSort] = useState<SortState>({ key: "delta", dir: "desc" });
+  const [sort, setSort] = useState<SortState>({ key: "pacing", dir: "desc" });
   const [tooltip, setTooltip] = useState<{ x: number; y: number; day: number } | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const dateMenuRef = useRef<HTMLDivElement>(null);
@@ -249,29 +248,34 @@ export default function Dashboard() {
   }
 
   // ---- filas de la tabla densa (cliente × plataforma) ----
+  // 4 cosas puntuales, por pedido explícito: presupuesto proyectado, real
+  // consumido, ritmo de consumo y remanente — todas derivadas de
+  // budget/spend8 (el mismo par que ya alimenta el gráfico de arriba), no
+  // de cpl (esa es otra métrica — costo por resultado — que no es lo que
+  // esta vista necesita mostrar).
   const rows: Row[] = [];
   clientsIncluded.forEach((c) => {
     const st = statusFor(c, today, daysInMonth);
-    const pacingPct = c.budget === 0 ? 0 : (c.spend8 / c.budget) * 100;
-    PLATFORMS.forEach((p) => {
-      if (!enabled[p.key]) return;
-      const e = c.cpl[p.key];
-      if (!e) return;
-      // target 0 = sin objetivo cargado (cuenta real sin media plan) — no
-      // dividir por 0.
-      const deltaPct = e.target === 0 ? 0 : Math.round(((e.real - e.target) / e.target) * 1000) / 10;
+    Object.keys(c.mix).forEach((key) => {
+      const platKey = key as PlatformKey;
+      if (!enabled[platKey]) return;
+      const frac = (c.mix[platKey] || 0) / 100;
+      if (frac <= 0) return;
+      const p = PLATFORMS.find((pl) => pl.key === platKey);
+      if (!p) return;
+      const budget = c.budget * frac;
+      const spend = c.spend8 * frac;
       rows.push({
         clientKey: c.key,
         clientName: c.name,
         platKey: p.key,
         platLabel: p.label,
         platVar: p.varName,
-        pacingPct,
-        target: e.target,
-        real: e.real,
-        deltaPct,
-        label: e.label || "CPL",
-        prevPct: e.prevPeriodDeltaPct,
+        pacingPct: budget === 0 ? 0 : (spend / budget) * 100,
+        budget,
+        spend,
+        remaining: budget - spend,
+        prevPct: c.cpl[platKey]?.prevPeriodDeltaPct,
         statusKey: st.key,
         statusLabel: st.label,
       });
@@ -282,12 +286,12 @@ export default function Dashboard() {
     switch (sort.key) {
       case "pacing":
         return r.pacingPct;
-      case "objetivo":
-        return r.target;
+      case "presupuesto":
+        return r.budget;
       case "real":
-        return r.real;
-      case "delta":
-        return r.deltaPct;
+        return r.spend;
+      case "remanente":
+        return r.remaining;
     }
   }
   const sortedRows = [...rows].sort((a, b) => (sortVal(a) - sortVal(b)) * (sort.dir === "desc" ? -1 : 1));
@@ -681,14 +685,14 @@ export default function Dashboard() {
                   <th className="sortable" onClick={() => onSort("pacing")}>
                     Ritmo de consumo{sortIcon("pacing")}
                   </th>
-                  <th className="num sortable" onClick={() => onSort("objetivo")}>
-                    Objetivo{sortIcon("objetivo")}
+                  <th className="num sortable" onClick={() => onSort("presupuesto")}>
+                    Presupuesto proyectado{sortIcon("presupuesto")}
                   </th>
                   <th className="num sortable" onClick={() => onSort("real")}>
                     Real{sortIcon("real")}
                   </th>
-                  <th className="num sortable" onClick={() => onSort("delta")}>
-                    Δ{sortIcon("delta")}
+                  <th className="num sortable" onClick={() => onSort("remanente")}>
+                    Remanente{sortIcon("remanente")}
                   </th>
                   {compareOn && <th className="num">Vs. per. ant.</th>}
                   <th>Estado</th>
@@ -708,7 +712,6 @@ export default function Dashboard() {
                       <td>
                         <span className="plat-dot" style={{ background: `var(${r.platVar})` }} />
                         {r.platLabel}
-                        {r.label !== "CPL" && <span style={{ color: "var(--text-muted)", fontSize: 11 }}> ({r.label})</span>}
                       </td>
                       <td>
                         <span className="mini-track">
@@ -718,11 +721,11 @@ export default function Dashboard() {
                           {Math.round(r.pacingPct)}%
                         </span>
                       </td>
-                      <td className="num">{fmtFull(r.target)}</td>
-                      <td className="num">{fmtFull(r.real)}</td>
-                      <td className="num" style={{ color: r.deltaPct <= 0 ? "var(--delta-good-text)" : "var(--delta-bad-text)" }}>
-                        {r.deltaPct > 0 ? "+" : ""}
-                        {r.deltaPct}%
+                      <td className="num">{fmtFull(r.budget)}</td>
+                      <td className="num">{fmtFull(r.spend)}</td>
+                      <td className="num" style={{ color: r.remaining < 0 ? "var(--delta-bad-text)" : "var(--delta-good-text)" }}>
+                        {r.remaining >= 0 ? "+" : ""}
+                        {fmtFull(r.remaining)}
                       </td>
                       {compareOn && (
                         <td className="num" style={{ color: "var(--text-secondary)", fontSize: 12 }}>

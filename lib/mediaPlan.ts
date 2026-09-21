@@ -1,0 +1,152 @@
+import type { PlatformKey } from "./types";
+
+/**
+ * Lee los objetivos de inversión (media plan) desde la "Hoja maestra de
+ * proyectados - IGNITE" del equipo, vía el conector de Google Sheets de
+ * Windsor.ai — mismo mecanismo que el resto de lib/windsor.ts, otra fuente
+ * más dentro de Windsor (no una herramienta nueva).
+ *
+ * ⚠️ ESTADO: el connector "googlesheets" y el hecho de que la primera fila
+ * de la hoja se vuelve la lista de campos consultables están confirmados
+ * contra la documentación pública de Windsor
+ * (windsor.ai/data-field/googlesheets/) — pero no contra una respuesta real
+ * de ESTA hoja en particular todavía. Si `targets` viene vacío pese a que la
+ * hoja tiene filas, revisar primero que las columnas se llamen EXACTAMENTE
+ * como se espera acá (ver abajo) — Windsor usa el nombre de columna tal cual
+ * está escrito en la hoja, sin normalizar mayúsculas/acentos.
+ *
+ * Columnas esperadas en la hoja ("Hoja maestra de proyectados - IGNITE -
+ * Consumos en plataformas", ver docs/how-to/conectar-windsor.md):
+ *   cliente, plataforma, mes, cuenta, presupuesto_proyectado
+ *
+ * - cliente: texto libre (hoy no se cruza contra nada, es solo referencia
+ *   humana en la hoja — el cruce real con el dashboard es por "cuenta").
+ * - plataforma: google | meta | tiktok | linkedin.
+ * - mes: "2026-09" o "2026-09-01" — se aceptan ambos formatos.
+ * - cuenta: el account_id real tal cual aparece en Windsor.ai (el mismo que
+ *   ya se usa como key de las filas reales en fetchWindsorSpend).
+ * - presupuesto_proyectado: número plano, sin "$" ni separador de miles.
+ *
+ * SOLO SERVER-SIDE. No importar desde ningún componente "use client".
+ */
+
+const WINDSOR_BASE_URL = "https://connectors.windsor.ai";
+const SHEETS_CONNECTOR = "googlesheets";
+
+export interface MediaPlanTarget {
+  cliente: string;
+  plataforma: PlatformKey;
+  mes: string;
+  cuenta: string;
+  presupuesto: number;
+}
+
+/** "2026-09" y "2026-09-01" — los 2 formatos de mes que aceptamos en la hoja. */
+function currentMonthKeys(now: Date): string[] {
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  return [`${y}-${m}`, `${y}-${m}-01`];
+}
+
+/**
+ * Trae todas las filas de la hoja maestra de proyectados, sin filtrar por
+ * mes (el llamador decide qué mes le interesa). Nunca tira: cualquier error
+ * se atrapa y devuelve una lista vacía + un warning — /api/spend sigue
+ * funcionando con "$0 / Sin objetivo cargado" aunque la hoja falle.
+ */
+export async function fetchMediaPlanTargets(): Promise<{ targets: MediaPlanTarget[]; warning?: string }> {
+  if (!process.env.WINDSOR_API_KEY) return { targets: [] };
+
+  try {
+    // A diferencia de los demás fetchers de este proyecto (Google/Meta/TikTok
+    // Ads), esta consulta no tenía date_from/date_to — verificado en vivo
+    // 2026-09-21: sin un rango de fecha, Windsor devuelve 0 filas incluso con
+    // la hoja bien conectada y con datos (aunque las filas de la hoja no
+    // tengan una noción de fecha propia — Windsor igual filtra por su propio
+    // "data_fetched_at"). Se pide un año hacia atrás por las dudas de que el
+    // próximo sync no sea inmediato.
+    const now = new Date();
+    const yearAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+    const params = new URLSearchParams({
+      api_key: process.env.WINDSOR_API_KEY,
+      fields: "cliente,plataforma,mes,cuenta,presupuesto_proyectado",
+      date_from: yearAgo.toISOString().slice(0, 10),
+      date_to: now.toISOString().slice(0, 10),
+    });
+    const res = await fetch(`${WINDSOR_BASE_URL}/${SHEETS_CONNECTOR}?${params.toString()}`, { cache: "no-store" });
+    if (!res.ok) {
+      const t = await res.text().catch(() => "");
+      throw new Error(`HTTP ${res.status} — ${t.slice(0, 200)}`);
+    }
+    const json = await res.json();
+    const rows = Array.isArray(json) ? json : json?.data;
+    if (!Array.isArray(rows)) {
+      throw new Error("Respuesta inesperada de Windsor.ai (hoja de proyectados) — ni array ni { data: [...] }");
+    }
+
+    const targets: MediaPlanTarget[] = rows
+      .map((r: any) => ({
+        cliente: String(r.cliente ?? "").trim(),
+        plataforma: String(r.plataforma ?? "").trim() as PlatformKey,
+        mes: String(r.mes ?? "").trim(),
+        cuenta: String(r.cuenta ?? "").trim(),
+        presupuesto: Number(r.presupuesto_proyectado ?? 0),
+      }))
+      .filter((t) => t.cuenta && t.mes);
+
+    // Diagnóstico: la consulta no tiró error, pero no hay ninguna fila
+    // utilizable — dos causas bien distintas que sin esto quedan indistinguibles
+    // desde afuera (las dos terminan en "$0 / Sin objetivo cargado" en silencio).
+    if (targets.length === 0) {
+      if (rows.length === 0) {
+        return {
+          targets: [],
+          warning: `Hoja de proyectados (Windsor.ai / Google Sheets): la consulta no devolvió ninguna fila — revisar que el Google Sheet esté conectado como fuente de datos en Windsor.ai (connector "googlesheets").`,
+        };
+      }
+      return {
+        targets: [],
+        warning: `Hoja de proyectados (Windsor.ai / Google Sheets): se leyeron ${rows.length} fila(s), pero ninguna tenía "cuenta" y "mes" completos — revisar que los encabezados de la hoja sean exactamente cliente/plataforma/mes/cuenta/presupuesto_proyectado (sin espacios ni mayúsculas distintas).`,
+      };
+    }
+
+    return { targets };
+  } catch (err: any) {
+    return {
+      targets: [],
+      warning: `Hoja de proyectados (Windsor.ai / Google Sheets): falló la consulta, se sigue sin objetivo cargado. Detalle: ${err?.message || err}`,
+    };
+  }
+}
+
+/**
+ * Arma un mapa account_id -> presupuesto proyectado, ya filtrado al mes
+ * pedido (por defecto, el mes en curso) — lo que necesita
+ * fetchWindsorSpend para pisar el budget de una cuenta real.
+ */
+export async function fetchMediaPlanBudgetByAccount(
+  now: Date = new Date()
+): Promise<{ byAccount: Map<string, number>; warning?: string }> {
+  const { targets, warning } = await fetchMediaPlanTargets();
+  if (warning) return { byAccount: new Map(), warning };
+
+  const monthKeys = currentMonthKeys(now);
+  const byAccount = new Map<string, number>();
+  targets.forEach((t) => {
+    if (monthKeys.includes(t.mes)) byAccount.set(t.cuenta, t.presupuesto);
+  });
+
+  // Hay filas leídas, pero ninguna es del mes actual — la sospecha más
+  // probable es que Google Sheets no se sincroniza en vivo en cada request
+  // (como el resto de los connectors de Windsor, en el plan Basic es una
+  // vez al día): si se acaba de editar la hoja, puede tardar en reflejarse.
+  if (byAccount.size === 0) {
+    const mesesEncontrados = [...new Set(targets.map((t) => t.mes))].filter(Boolean);
+    return {
+      byAccount,
+      warning: `Hoja de proyectados: se leyeron ${targets.length} fila(s) de Windsor.ai, pero ninguna es del mes actual (se esperaba "${monthKeys[0]}"). Meses encontrados en la hoja: ${mesesEncontrados.join(", ") || "ninguno"}. Si la hoja se editó recién, puede ser que Windsor todavía no resincronizó.`,
+    };
+  }
+
+  return { byAccount };
+}
