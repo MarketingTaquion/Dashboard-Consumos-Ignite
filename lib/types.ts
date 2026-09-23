@@ -62,6 +62,12 @@ export interface CampaignRow {
   impressions: number;
   clicks: number;
   spend: number; // real, ARS — reutilizado por lib/financeCampaigns.ts para el desglose de Finanzas
+  // Presupuesto proyectado de la hoja madre para esta campaña puntual
+  // (columna "campaña", ver lib/mediaPlan.ts); 0 si no hay fila cargada —
+  // nunca se inventa. Se agrega en app/api/campaigns/route.ts, no en los
+  // fetchers de lib/windsorCampaigns.ts/windsorMeta.ts/windsorTiktok.ts —
+  // esos son solo de datos de Windsor, el cruce con la hoja va aparte.
+  budget: number;
   cpm: number;
   ctr: number; // %, 0-100
   cpl: number; // spend / conversions; 0 si conversions es 0
