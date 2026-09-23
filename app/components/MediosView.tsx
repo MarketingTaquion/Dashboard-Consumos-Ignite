@@ -30,6 +30,16 @@ function fmtInt(n: number): string {
 function fmtMoney(n: number): string {
   return "$" + Math.round(n).toLocaleString("es-AR");
 }
+// Mismo formato compacto que los chips "Total presupuesto"/"Total gastado"
+// de Finanzas (Dashboard.tsx) — duplicado a propósito, ver la nota sobre
+// DatePreset más abajo.
+function fmtCompact(n: number): string {
+  const sign = n < 0 ? "-" : "";
+  n = Math.abs(n);
+  if (n >= 1e6) return sign + "$" + (n / 1e6).toFixed(1).replace(".", ",") + "M";
+  if (n >= 1e3) return sign + "$" + (n / 1e3).toFixed(0) + "k";
+  return sign + "$" + n.toFixed(0);
+}
 function fmtPct(n?: number): string {
   return n === undefined ? "—" : Math.round(n) + "%";
 }
@@ -119,6 +129,12 @@ export default function MediosView() {
   const activeLabel = PLATFORMS.find((p) => p.key === platform)?.label ?? platform;
   const dateLabel = DATE_PRESETS.find((d) => d.key === datePreset)?.label ?? "Este mes";
 
+  // Totales — suma de las campañas que se están mostrando (plataforma +
+  // período elegidos), mismo par "Total presupuesto"/"Total gastado" que ya
+  // tiene Finanzas arriba de su tabla.
+  const totalBudget = data.campaigns.reduce((sum, c) => sum + c.budget, 0);
+  const totalSpend = data.campaigns.reduce((sum, c) => sum + c.spend, 0);
+
   return (
     <div className="wrap">
       <header className="top">
@@ -205,6 +221,14 @@ export default function MediosView() {
                 )}
               </div>
             )}
+          </div>
+          <div className="stat-chip">
+            <span className="stat-label">Total presupuesto</span>
+            <span className="stat-value num">{fmtCompact(totalBudget)}</span>
+          </div>
+          <div className="stat-chip">
+            <span className="stat-label">Total gastado</span>
+            <span className="stat-value num">{fmtCompact(totalSpend)}</span>
           </div>
         </div>
         <div className="chip-row">
