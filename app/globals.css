@@ -301,7 +301,7 @@ footer.foot code { background: var(--surface-2); padding: 1px 5px; border-radius
 .medios-subnav a[aria-current="page"] { color: var(--accent); border-bottom-color: var(--accent); }
 
 /* Vista Anuncios — grilla de tarjetas */
-.ad-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 16px; margin-top: 14px; }
+.ad-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 16px; margin-top: 14px; }
 .ad-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
 .ad-thumb {
   height: 110px; display: flex; align-items: center; justify-content: center;
@@ -309,8 +309,17 @@ footer.foot code { background: var(--surface-2); padding: 1px 5px; border-radius
   background: linear-gradient(135deg, var(--plat-google), color-mix(in srgb, var(--plat-google) 55%, #000));
 }
 .ad-body { padding: 12px 14px 14px; }
-.ad-name { font-weight: 700; font-size: 13px; margin-bottom: 8px; }
-.ad-meta { font-size: 11px; color: var(--text-muted); margin-bottom: 8px; }
+/* Los nombres reales de campaña/anuncio vienen como un solo "token" largo
+   separado por guiones bajos (ej. TQN_AON_META_..._EMILIA), sin espacios —
+   sin overflow-wrap se desbordan como una sola línea y quedan tapados por
+   el overflow:hidden de la tarjeta en vez de wrappear. title= en el JSX
+   además permite ver el nombre completo al pasar el mouse. */
+.ad-name {
+  font-weight: 700; font-size: 13px; line-height: 1.35; margin-bottom: 6px;
+  overflow-wrap: anywhere;
+}
+.ad-meta { font-size: 11px; color: var(--text-muted); margin-bottom: 8px; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+.ad-meta .ad-meta-campaign { color: var(--text-secondary); }
 .ad-metric-row { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; border-top: 1px solid var(--border); }
 .ad-metric-row:first-of-type { border-top: none; }
 .ad-metric-row span:first-child { color: var(--text-muted); }
