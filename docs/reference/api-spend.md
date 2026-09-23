@@ -34,6 +34,19 @@ Tipo `SpendResponse` (definido en [`lib/types.ts`](../../lib/types.ts)):
 | `mix` | `Partial<Record<PlatformKey, number>>` | % de allocation por plataforma. Debería sumar ~100 entre las plataformas presentes. |
 | `cpl` | `Partial<Record<PlatformKey, PlatformCpl>>` | Costo por resultado, por plataforma — ver abajo. |
 | `health` | `HealthIssue[]` | Alertas técnicas activas para ese cliente. |
+| `accountId` | `string?` | `account_id` real de Windsor.ai — solo en cuentas reales (no en clientes mock), para cruzar con `campaigns`. |
+| `campaigns` | `FinanceCampaignRow[]?` | Desglose por campaña de esa cuenta — ver abajo. Ausente/vacío en clientes mock (no hay fetcher de campañas para el mock). |
+
+### `FinanceCampaignRow`
+
+Desglose por campaña de la vista Finanzas (a pedido explícito: "todas las campañas por cuenta con su proyectado por campaña específico, declarado en la sheet madre") — ver [`lib/financeCampaigns.ts`](../../lib/financeCampaigns.ts). Reutiliza los mismos fetchers de campaña de Medios (Google/Meta/TikTok), reagrupados por cuenta en vez de por plataforma. A propósito NO incluye métricas de performance (CPM, CTR, Alcance, etc. — esas son de Medios), solo lo que Finanzas necesita:
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `campaignId` | `string` | ID real de campaña en Windsor.ai |
+| `campaignName` | `string` | Nombre real de campaña |
+| `spend` | `number` | Real, ARS |
+| `budget` | `number` | Presupuesto proyectado de la hoja madre para esa campaña puntual (columna `campana`, ver [`lib/mediaPlan.ts`](../../lib/mediaPlan.ts)); `0` si no hay fila cargada — nunca se inventa. |
 
 ### `PlatformCpl`
 

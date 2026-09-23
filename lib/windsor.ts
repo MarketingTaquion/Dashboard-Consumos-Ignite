@@ -357,6 +357,7 @@ export async function fetchWindsorSpend(
         allRealClients.push({
           key: `windsor-${source.platformKey}-${t.accountId}`,
           name: t.accountName,
+          accountId: t.accountId,
           vertical: `Cuenta real (Windsor.ai — ${source.label})`,
           // Si la hoja de proyectados tiene un presupuesto para esta cuenta
           // este mes, se usa; si no, sigue en $0 (no se inventa un objetivo).

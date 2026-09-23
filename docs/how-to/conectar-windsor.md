@@ -26,12 +26,15 @@ Las cuentas reales aparecen con `$0` de objetivo y "Sin objetivo cargado" hasta 
 | `plataforma` | `google`, `meta`, `tiktok` o `linkedin` | `google` |
 | `mes` | `2026-09` o `2026-09-01` (los 2 formatos sirven) | `2026-09` |
 | `cuenta` | el `account_id` real tal cual aparece en Windsor.ai — es lo que cruza esta fila con la cuenta real del dashboard | `6551720043` |
+| `campana` | **opcional** — sin ñ a propósito (no verificado si Windsor maneja bien encabezados con tildes). Vacía = presupuesto de la CUENTA entera (como antes). Completa con el nombre exacto de campaña (copiado de Windsor/de la tabla de Campañas de Medios, no retipeado) = presupuesto específico de esa campaña, que se ve desglosado en la vista Finanzas | `TQN_AON_META_INTERACCION_RMARCA_MANUAL_LA_COMUNIDAD` |
 | `presupuesto_proyectado` | número plano, sin `$` ni separador de miles | `1200000` |
+
+Si una cuenta tiene al menos una fila con `campana` cargada para el mes, el presupuesto de la CUENTA (el que se ve en Finanzas a nivel cuenta y en los chips de arriba) pasa a ser la **suma de sus campañas** — la fila de cuenta (sin `campana`), si también existe, se ignora a propósito para no mantener dos números que puedan desincronizarse.
 
 Para conectarla, son **2 pasos** en Windsor.ai — los dos hacen falta, no alcanza con el primero:
 
 1. **Add data → Google Sheets**: compartir la hoja como *Viewer* con el service account que muestra la pantalla → pegar el link de la hoja → **Add Account**.
-2. **Preview and Destination**: revisar la preview de filas reales y **seleccionar explícitamente** las 5 columnas (`cliente`, `plataforma`, `mes`, `cuenta`, `presupuesto_proyectado`) en la lista de "Fields" → confirmar. Sin este paso, la hoja queda "agregada" pero Windsor sigue devolviendo 0 filas para esos campos — verificado en vivo 2026-09-21.
+2. **Preview and Destination**: revisar la preview de filas reales y **seleccionar explícitamente** las 6 columnas (`cliente`, `plataforma`, `mes`, `cuenta`, `campana`, `presupuesto_proyectado`) en la lista de "Fields" → confirmar. Sin este paso, la hoja queda "agregada" pero Windsor sigue devolviendo 0 filas para esos campos — verificado en vivo 2026-09-21.
 
 No hace falta ninguna variable de entorno nueva — usa la misma `WINDSOR_API_KEY`. La consulta en `lib/mediaPlan.ts` sí necesita `date_from`/`date_to` (un año hacia atrás) para traer algo — sin fecha, Windsor devuelve 0 filas aunque la hoja esté bien conectada; las filas de la hoja no tienen una noción de fecha propia, así que un rango amplio no filtra nada real, solo evita que la consulta vuelva vacía.
 
