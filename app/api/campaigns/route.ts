@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { fetchGoogleAdsCampaigns } from "@/lib/windsorCampaigns";
 import { fetchMetaCampaigns } from "@/lib/windsorMeta";
 import { fetchTiktokCampaigns } from "@/lib/windsorTiktok";
-import { hasWindsorCredentials, DATE_RANGE_KEYS, type DateRangeKey } from "@/lib/windsor";
+import { hasWindsorCredentials, resolveDateRange, DATE_RANGE_KEYS, type DateRangeKey, type ResolvedDateRange } from "@/lib/windsor";
 import { fetchMediaPlanBudgetByCampaign } from "@/lib/mediaPlan";
 import { MOCK_CAMPAIGNS } from "@/lib/mockCampaigns";
 import type { CampaignRow, CampaignsResponse, PlatformKey } from "@/lib/types";
@@ -43,27 +43,40 @@ function parsePlatformParam(request: Request): PlatformKey {
   return raw && ALL_PLATFORM_KEYS.includes(raw) ? raw : "google";
 }
 
-function notConnectedResponse(platform: PlatformKey): CampaignsResponse {
+function notConnectedResponse(platform: PlatformKey, range: ResolvedDateRange): CampaignsResponse {
   return {
     source: "mock",
     platform,
     campaigns: MOCK_CAMPAIGNS[platform] ?? [],
     warnings: [`Campañas de ${platform} todavía no están conectadas a Windsor.ai — mostrando datos de ejemplo.`],
+    today: range.today,
+    daysInPeriod: range.daysInPeriod,
   };
 }
 
 export async function GET(request: Request) {
   const platform = parsePlatformParam(request);
   const rangeKey = parseRangeParam(request);
+  // Se resuelve una sola vez — lo necesitan tanto los fetchers de campaña
+  // (vía rangeKey) como el presupuesto diario recomendado del lado del
+  // cliente (today/daysInPeriod), igual que ya hace SpendResponse para
+  // Finanzas.
+  const range = resolveDateRange(rangeKey);
 
   // Plataforma sin fetcher real todavía (LinkedIn): mock explícito con
   // warning, sin importar si hay API key configurada o no.
   if (!CONNECTED_PLATFORMS.includes(platform)) {
-    return NextResponse.json(notConnectedResponse(platform));
+    return NextResponse.json(notConnectedResponse(platform, range));
   }
 
   if (!hasWindsorCredentials()) {
-    const body: CampaignsResponse = { source: "mock", platform, campaigns: MOCK_CAMPAIGNS[platform] ?? [] };
+    const body: CampaignsResponse = {
+      source: "mock",
+      platform,
+      campaigns: MOCK_CAMPAIGNS[platform] ?? [],
+      today: range.today,
+      daysInPeriod: range.daysInPeriod,
+    };
     return NextResponse.json(body);
   }
 
@@ -86,6 +99,8 @@ export async function GET(request: Request) {
       platform,
       campaigns: campaignsWithBudget.length > 0 ? campaignsWithBudget : MOCK_CAMPAIGNS[platform] ?? [],
       warnings: allWarnings.length ? allWarnings : undefined,
+      today: range.today,
+      daysInPeriod: range.daysInPeriod,
     };
     return NextResponse.json(body);
   } catch (err: any) {
@@ -94,6 +109,8 @@ export async function GET(request: Request) {
       platform,
       campaigns: MOCK_CAMPAIGNS[platform] ?? [],
       warnings: [`Error inesperado consultando campañas, se usó mock: ${err?.message || err}`],
+      today: range.today,
+      daysInPeriod: range.daysInPeriod,
     };
     return NextResponse.json(body);
   }

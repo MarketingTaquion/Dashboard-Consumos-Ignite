@@ -49,6 +49,23 @@ function extraColCount(platform: PlatformKey): number {
   return 0;
 }
 
+// Presupuesto diario recomendado = remanente / días que quedan en el
+// período, para llegar justo al presupuesto proyectado al cierre — mismo
+// concepto de pacing que ya usa Finanzas (Dashboard.tsx), acá por campaña.
+// undefined (se muestra "—") en 2 casos: sin presupuesto cargado (nada que
+// recomendar), o el período ya cerró (today >= daysInPeriod — rangos fijos
+// como "Hoy"/"Ayer"/"7d"/"Mes anterior" siempre están 100% transcurridos,
+// solo "Este mes" tiene días remanentes de verdad).
+function dailyRecommended(budget: number, spend: number, today: number, daysInPeriod: number): number | undefined {
+  if (budget === 0) return undefined;
+  const daysRemaining = daysInPeriod - today;
+  if (daysRemaining <= 0) return undefined;
+  return (budget - spend) / daysRemaining;
+}
+function fmtDailySigned(n: number): string {
+  return (n >= 0 ? "+" : "") + fmtMoney(n);
+}
+
 export default function MediosView() {
   const [platform, setPlatform] = useState<PlatformKey>("google");
   const [datePreset, setDatePreset] = useState<DatePreset>("month");
@@ -215,6 +232,7 @@ export default function MediosView() {
                 <th>Campaña</th>
                 <th className="num">Presupuesto proyectado</th>
                 <th className="num">Real</th>
+                <th className="num">Presup. diario recom.</th>
                 <th className="num">Impr.</th>
                 <th className="num">Clicks</th>
                 <th className="num">CPM</th>
@@ -249,17 +267,22 @@ export default function MediosView() {
             <tbody>
               {data.campaigns.length === 0 ? (
                 <tr>
-                  <td colSpan={10 + extraColCount(platform)} style={{ color: "var(--text-muted)" }}>
+                  <td colSpan={11 + extraColCount(platform)} style={{ color: "var(--text-muted)" }}>
                     Sin campañas para mostrar.
                   </td>
                 </tr>
               ) : (
-                data.campaigns.map((c) => (
+                data.campaigns.map((c) => {
+                  const daily = dailyRecommended(c.budget, c.spend, data.today, data.daysInPeriod);
+                  return (
                   <tr key={c.accountId + ":" + c.campaignId}>
                     <td>{c.accountName}</td>
                     <td>{c.campaignName}</td>
                     <td className="num">{fmtMoney(c.budget)}</td>
                     <td className="num">{fmtMoney(c.spend)}</td>
+                    <td className="num" style={daily === undefined ? undefined : { color: daily < 0 ? "var(--delta-bad-text)" : "var(--delta-good-text)" }}>
+                      {daily === undefined ? "—" : fmtDailySigned(daily)}
+                    </td>
                     <td className="num">{fmtInt(c.impressions)}</td>
                     <td className="num">{fmtInt(c.clicks)}</td>
                     <td className="num">{fmtMoney(c.cpm)}</td>
@@ -290,7 +313,8 @@ export default function MediosView() {
                       </>
                     )}
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>

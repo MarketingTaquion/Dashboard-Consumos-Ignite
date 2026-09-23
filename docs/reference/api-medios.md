@@ -33,6 +33,8 @@ Campos comunes a las 3 plataformas: `accountId/Name`, `campaignId/Name`, `impres
 
 `budget` (Presupuesto proyectado) NO viene de Windsor — se cruza en [`app/api/campaigns/route.ts`](../../app/api/campaigns/route.ts) llamando a `fetchMediaPlanBudgetByCampaign()` ([`lib/mediaPlan.ts`](../../lib/mediaPlan.ts)), por `accountId:campaignName`; `0` si no hay fila cargada en la hoja madre para esa campaña. Los fetchers de campaña (`windsorCampaigns.ts`/`windsorMeta.ts`/`windsorTiktok.ts`) ponen `budget: 0` como placeholder — siempre se pisa en el route, nunca se usa ese valor.
 
+`CampaignsResponse` también trae `today`/`daysInPeriod` (mismo par que `SpendResponse` para Finanzas, resuelto una sola vez por request vía `resolveDateRange(rangeKey)`, en las 4 salidas posibles de la ruta) — es lo que usa `MediosView.tsx` para calcular el **Presupuesto diario recomendado** del lado del cliente: `(budget - spend) / (daysInPeriod - today)`. `undefined` (se muestra "—") si `budget` es `0` (nada que recomendar) o si el período ya está 100% transcurrido (`daysInPeriod - today <= 0` — cualquier rango fijo como "Hoy"/"7d"/"Mes anterior"; solo "Este mes" tiene días remanentes de verdad). Puede dar negativo (ritmo por encima del presupuesto) — se muestra tal cual, en rojo, igual que "Remanente" en Finanzas.
+
 - **Google Ads**: `searchImpressionShare`, `qualityScore`, `searchBudgetLostIS`, `searchRankLostIS`, `searchAbsoluteTopIS`, `searchTopIS`, `optimizationScore`.
 - **Meta Ads y TikTok Ads**: `reach`, `frequency`.
 - **TikTok Ads** además: `avgVideoPlaySeconds`, `likes`.
