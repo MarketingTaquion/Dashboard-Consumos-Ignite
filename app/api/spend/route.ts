@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { MOCK_CLIENTS, MOCK_TODAY, MOCK_DAYS_IN_MONTH } from "@/lib/mockData";
 import { fetchGoogleAdsSpend, hasGoogleAdsCredentials } from "@/lib/googleAds";
 import { fetchWindsorSpend, hasWindsorCredentials, resolveDateRange, DATE_RANGE_KEYS, type DateRangeKey } from "@/lib/windsor";
+import { fetchCampaignsByAccount } from "@/lib/financeCampaigns";
 import type { SpendResponse } from "@/lib/types";
 
 export const dynamic = "force-dynamic"; // siempre recalcular, nunca cachear una respuesta vieja
@@ -32,12 +33,21 @@ export async function GET(request: Request) {
   if (hasWindsorCredentials()) {
     try {
       const range = resolveDateRange(rangeKey);
-      const { clients, warnings } = await fetchWindsorSpend(MOCK_CLIENTS, range);
+      // Cuentas (presupuesto/real ya existentes) + desglose por campaña
+      // (lib/financeCampaigns.ts, a pedido explícito del usuario) en
+      // paralelo — son 2 fuentes independientes que se mezclan acá, no una
+      // depende de la otra.
+      const [{ clients, warnings: spendWarnings }, { byAccount: campaignsByAccount, warnings: campaignWarnings }] =
+        await Promise.all([fetchWindsorSpend(MOCK_CLIENTS, range), fetchCampaignsByAccount(rangeKey)]);
+      const clientsWithCampaigns = clients.map((c) =>
+        c.accountId ? { ...c, campaigns: campaignsByAccount.get(c.accountId) ?? [] } : c
+      );
+      const warnings = [...spendWarnings, ...campaignWarnings];
       const body: SpendResponse = {
         source: "windsor",
         today: range.today,
         daysInMonth: range.daysInPeriod,
-        clients,
+        clients: clientsWithCampaigns,
         warnings: warnings.length ? warnings : undefined,
       };
       return NextResponse.json(body);

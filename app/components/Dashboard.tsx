@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { ClientData, PlatformKey, SpendResponse } from "@/lib/types";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import type { ClientData, FinanceCampaignRow, PlatformKey, SpendResponse } from "@/lib/types";
 
 const PLATFORMS: { key: PlatformKey; label: string; varName: string }[] = [
   { key: "meta", label: "Meta Ads", varName: "--plat-meta" },
@@ -28,17 +28,24 @@ function fmtFull(n: number): string {
 
 type Status = { key: "good" | "warning" | "critical"; label: string; ratio: number };
 
-function statusFor(c: ClientData, today: number, daysInMonth: number): Status {
-  // Sin presupuesto cargado (ej. cuenta real de Windsor sin media plan
-  // todavía) no hay pacing que calcular — no fabricar un "sobre-ritmo" por
-  // dividir por 0. Ver docs/explanation/estado-y-limitaciones.md.
-  if (c.budget === 0) return { key: "good", label: "Sin objetivo cargado", ratio: 0 };
-  const flat = c.spend8 / today;
-  const projected = c.spend8 + flat * (daysInMonth - today);
-  const ratio = projected / c.budget;
+// Genérico en budget/spend — lo usan tanto las filas de cuenta (ClientData)
+// como las de campaña dentro de una cuenta (FinanceCampaignRow), mismo
+// cálculo de proyección de cierre de período para las dos.
+function statusForBudgetSpend(budget: number, spend: number, today: number, daysInMonth: number): Status {
+  // Sin presupuesto cargado (ej. cuenta o campaña sin fila en la hoja de
+  // proyectados todavía) no hay pacing que calcular — no fabricar un
+  // "sobre-ritmo" por dividir por 0. Ver docs/explanation/estado-y-limitaciones.md.
+  if (budget === 0) return { key: "good", label: "Sin objetivo cargado", ratio: 0 };
+  const flat = spend / today;
+  const projected = spend + flat * (daysInMonth - today);
+  const ratio = projected / budget;
   if (ratio > 1.1) return { key: "warning", label: "Sobre-ritmo", ratio };
   if (ratio < 0.85) return { key: "critical", label: "Bajo-ritmo", ratio };
   return { key: "good", label: "En ritmo", ratio };
+}
+
+function statusFor(c: ClientData, today: number, daysInMonth: number): Status {
+  return statusForBudgetSpend(c.budget, c.spend8, today, daysInMonth);
 }
 
 function enabledMixFrac(c: ClientData, enabled: Record<PlatformKey, boolean>): number {
@@ -127,6 +134,7 @@ interface Row {
   prevPct?: number;
   statusKey: Status["key"];
   statusLabel: string;
+  campaigns?: FinanceCampaignRow[];
 }
 
 export default function Dashboard() {
@@ -148,6 +156,13 @@ export default function Dashboard() {
   const [customTo, setCustomTo] = useState("");
   const [bannerOpen, setBannerOpen] = useState(false);
   const [sort, setSort] = useState<SortState>({ key: "pacing", dir: "desc" });
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  // Filtro opcional para enfocarse en lo activo — no reemplaza la
+  // transparencia de $0 real (sigue mostrándose por defecto, a pedido
+  // explícito de antes); esto es un toggle aparte para cuando la lista de
+  // cuentas conectadas tiene muchas sin actividad real (ej. cuentas propias
+  // de Taquión descubiertas por Windsor que nunca tuvieron gasto).
+  const [onlyActive, setOnlyActive] = useState(false);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; day: number } | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const dateMenuRef = useRef<HTMLDivElement>(null);
@@ -176,10 +191,17 @@ export default function Dashboard() {
       .catch((err) => setError(String(err?.message || err)));
   }, [datePreset]);
 
+  // "Actividad" = gasto real acumulado > 0 — no "tiene campañas" (una cuenta
+  // puede tener campañas descubiertas en $0, eso no es actividad real).
+  const visibleClients = useMemo(() => {
+    if (!data) return [];
+    return onlyActive ? data.clients.filter((c) => c.spend8 > 0) : data.clients;
+  }, [data, onlyActive]);
+
   const clientsIncluded = useMemo(() => {
     if (!data) return [];
-    return clientKey === "all" ? data.clients : data.clients.filter((c) => c.key === clientKey);
-  }, [data, clientKey]);
+    return clientKey === "all" ? visibleClients : visibleClients.filter((c) => c.key === clientKey);
+  }, [data, visibleClients, clientKey]);
 
   const series = useMemo(() => {
     if (!data) return null;
@@ -278,9 +300,19 @@ export default function Dashboard() {
         prevPct: c.cpl[platKey]?.prevPeriodDeltaPct,
         statusKey: st.key,
         statusLabel: st.label,
+        campaigns: c.campaigns,
       });
     });
   });
+
+  function toggleExpanded(rowKey: string) {
+    setExpandedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(rowKey)) next.delete(rowKey);
+      else next.add(rowKey);
+      return next;
+    });
+  }
 
   function sortVal(r: Row): number {
     switch (sort.key) {
@@ -484,11 +516,17 @@ export default function Dashboard() {
       <div className="op-layout">
         <div className="card sidebar">
           <div className="eyebrow">Clientes</div>
+          <button className="toggle-chip" style={{ marginTop: 10, marginBottom: 4 }} aria-pressed={onlyActive} onClick={() => setOnlyActive((v) => !v)}>
+            <span className="toggle-track">
+              <span className="toggle-knob" />
+            </span>
+            Solo con actividad
+          </button>
           <div className="client-list">
             <button className="client-row" aria-pressed={clientKey === "all"} onClick={() => setClientKey("all")}>
               Todos los clientes
             </button>
-            {data.clients.map((c) => {
+            {visibleClients.map((c) => {
               const st = statusFor(c, today, daysInMonth);
               return (
                 <button key={c.key} className="client-row" aria-pressed={clientKey === c.key} onClick={() => setClientKey(c.key)}>
@@ -497,6 +535,7 @@ export default function Dashboard() {
                 </button>
               );
             })}
+            {visibleClients.length === 0 && <div style={{ color: "var(--text-muted)", fontSize: 12.5, padding: "8px 10px" }}>Sin cuentas con actividad.</div>}
           </div>
         </div>
 
@@ -706,40 +745,93 @@ export default function Dashboard() {
                     </td>
                   </tr>
                 ) : (
-                  sortedRows.map((r, i) => (
-                    <tr key={i}>
-                      <td>{r.clientName}</td>
-                      <td>
-                        <span className="plat-dot" style={{ background: `var(${r.platVar})` }} />
-                        {r.platLabel}
-                      </td>
-                      <td>
-                        <span className="mini-track">
-                          <span className={"mini-fill " + r.statusKey} style={{ width: Math.min(100, r.pacingPct) + "%" }} />
-                        </span>
-                        <span className="num" style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                          {Math.round(r.pacingPct)}%
-                        </span>
-                      </td>
-                      <td className="num">{fmtFull(r.budget)}</td>
-                      <td className="num">{fmtFull(r.spend)}</td>
-                      <td className="num" style={{ color: r.remaining < 0 ? "var(--delta-bad-text)" : "var(--delta-good-text)" }}>
-                        {r.remaining >= 0 ? "+" : ""}
-                        {fmtFull(r.remaining)}
-                      </td>
-                      {compareOn && (
-                        <td className="num" style={{ color: "var(--text-secondary)", fontSize: 12 }}>
-                          {prevLabel(r.prevPct)}
-                        </td>
-                      )}
-                      <td>
-                        <span className={"pill " + r.statusKey}>
-                          <span className="dot" />
-                          {r.statusLabel}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
+                  sortedRows.map((r, i) => {
+                    const rowKey = r.clientKey + "|" + r.platKey;
+                    const hasCampaigns = !!r.campaigns && r.campaigns.length > 0;
+                    const isExpanded = hasCampaigns && expandedRows.has(rowKey);
+                    return (
+                      <Fragment key={rowKey || i}>
+                        <tr>
+                          <td>
+                            {hasCampaigns && (
+                              <button
+                                className="row-expand-btn"
+                                aria-expanded={isExpanded}
+                                aria-label={isExpanded ? "Ocultar campañas" : "Ver campañas"}
+                                onClick={() => toggleExpanded(rowKey)}
+                              >
+                                {isExpanded ? "▾" : "▸"}
+                              </button>
+                            )}
+                            {r.clientName}
+                          </td>
+                          <td>
+                            <span className="plat-dot" style={{ background: `var(${r.platVar})` }} />
+                            {r.platLabel}
+                          </td>
+                          <td>
+                            <span className="mini-track">
+                              <span className={"mini-fill " + r.statusKey} style={{ width: Math.min(100, r.pacingPct) + "%" }} />
+                            </span>
+                            <span className="num" style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                              {Math.round(r.pacingPct)}%
+                            </span>
+                          </td>
+                          <td className="num">{fmtFull(r.budget)}</td>
+                          <td className="num">{fmtFull(r.spend)}</td>
+                          <td className="num" style={{ color: r.remaining < 0 ? "var(--delta-bad-text)" : "var(--delta-good-text)" }}>
+                            {r.remaining >= 0 ? "+" : ""}
+                            {fmtFull(r.remaining)}
+                          </td>
+                          {compareOn && (
+                            <td className="num" style={{ color: "var(--text-secondary)", fontSize: 12 }}>
+                              {prevLabel(r.prevPct)}
+                            </td>
+                          )}
+                          <td>
+                            <span className={"pill " + r.statusKey}>
+                              <span className="dot" />
+                              {r.statusLabel}
+                            </span>
+                          </td>
+                        </tr>
+                        {isExpanded &&
+                          r.campaigns!.map((camp) => {
+                            const cst = statusForBudgetSpend(camp.budget, camp.spend, today, daysInMonth);
+                            const cPacingPct = camp.budget === 0 ? 0 : (camp.spend / camp.budget) * 100;
+                            const cRemaining = camp.budget - camp.spend;
+                            return (
+                              <tr key={rowKey + ":" + camp.campaignId} className="campaign-subrow">
+                                <td colSpan={2} className="campaign-name-cell">
+                                  {camp.campaignName}
+                                </td>
+                                <td>
+                                  <span className="mini-track">
+                                    <span className={"mini-fill " + cst.key} style={{ width: Math.min(100, cPacingPct) + "%" }} />
+                                  </span>
+                                  <span className="num" style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                                    {Math.round(cPacingPct)}%
+                                  </span>
+                                </td>
+                                <td className="num">{fmtFull(camp.budget)}</td>
+                                <td className="num">{fmtFull(camp.spend)}</td>
+                                <td className="num" style={{ color: cRemaining < 0 ? "var(--delta-bad-text)" : "var(--delta-good-text)" }}>
+                                  {cRemaining >= 0 ? "+" : ""}
+                                  {fmtFull(cRemaining)}
+                                </td>
+                                {compareOn && <td className="num" />}
+                                <td>
+                                  <span className={"pill " + cst.key}>
+                                    <span className="dot" />
+                                    {cst.label}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </Fragment>
+                    );
+                  })
                 )}
               </tbody>
             </table>

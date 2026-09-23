@@ -22,6 +22,23 @@ export interface ClientData {
   mix: Partial<Record<PlatformKey, number>>; // % de allocation por plataforma, suma ~100
   cpl: Partial<Record<PlatformKey, PlatformCpl>>;
   health: HealthIssue[];
+  /** account_id real de Windsor.ai — solo en cuentas reales (key empieza con "windsor-"), para cruzar con `campaigns`. */
+  accountId?: string;
+  /** Desglose por campaña de esta cuenta, para la vista Finanzas — ver lib/financeCampaigns.ts. Ausente/vacío en clientes mock. */
+  campaigns?: FinanceCampaignRow[];
+}
+
+/**
+ * Fila de campaña simplificada para el desglose de la vista Finanzas —
+ * solo lo que un usuario de Finanzas necesita (presupuesto vs. real), no
+ * las métricas de performance de CampaignRow (esas son de Medios). Ver
+ * lib/financeCampaigns.ts.
+ */
+export interface FinanceCampaignRow {
+  campaignId: string;
+  campaignName: string;
+  spend: number; // real, ARS
+  budget: number; // presupuesto proyectado desde la hoja madre, por campaña; 0 si no hay fila cargada
 }
 
 export interface SpendResponse {
@@ -44,6 +61,7 @@ export interface CampaignRow {
   campaignName: string;
   impressions: number;
   clicks: number;
+  spend: number; // real, ARS — reutilizado por lib/financeCampaigns.ts para el desglose de Finanzas
   cpm: number;
   ctr: number; // %, 0-100
   cpl: number; // spend / conversions; 0 si conversions es 0

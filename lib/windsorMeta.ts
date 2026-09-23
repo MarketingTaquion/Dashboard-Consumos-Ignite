@@ -150,6 +150,7 @@ export async function fetchMetaCampaigns(rangeKey: DateRangeKey = "month"): Prom
       campaignName: acc.campaignName,
       impressions: acc.impressions,
       clicks: acc.clicks,
+      spend: acc.spend,
       cpm: acc.impressions > 0 ? (acc.spend / acc.impressions) * 1000 : 0,
       ctr: acc.impressions > 0 ? (acc.clicks / acc.impressions) * 100 : 0,
       cpl: acc.conversions > 0 ? acc.spend / acc.conversions : 0,

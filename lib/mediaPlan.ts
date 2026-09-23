@@ -17,15 +17,34 @@ import type { PlatformKey } from "./types";
  *
  * Columnas esperadas en la hoja ("Hoja maestra de proyectados - IGNITE -
  * Consumos en plataformas", ver docs/how-to/conectar-windsor.md):
- *   cliente, plataforma, mes, cuenta, presupuesto_proyectado
+ *   cliente, plataforma, mes, cuenta, campaña, presupuesto_proyectado
  *
  * - cliente: texto libre (hoy no se cruza contra nada, es solo referencia
- *   humana en la hoja — el cruce real con el dashboard es por "cuenta").
+ *   humana en la hoja — el cruce real con el dashboard es por "cuenta"
+ *   (+ "campaña" si está completa).
  * - plataforma: google | meta | tiktok | linkedin.
  * - mes: "2026-09" o "2026-09-01" — se aceptan ambos formatos.
  * - cuenta: el account_id real tal cual aparece en Windsor.ai (el mismo que
  *   ya se usa como key de las filas reales en fetchWindsorSpend).
+ * - campaña (con ñ — verificado en vivo 2026-09-23: Windsor SÍ maneja bien
+ *   encabezados con tilde en este connector; se había pedido el campo como
+ *   "campana" sin tilde por las dudas, y Windsor devolvió HTTP 400
+ *   "Unexpected field(s): {'campana'}. Did you mean: campana -> campaña" —
+ *   la cautela resultó innecesaria, el nombre real de columna es con
+ *   tilde). **Opcional**. Vacía = presupuesto de CUENTA (como antes).
+ *   Completa con el nombre exacto de campaña (tal cual aparece en Windsor /
+ *   en la tabla de Campañas de Medios, copiado, no retipeado) = presupuesto
+ *   específico de esa campaña. Ver fetchMediaPlanBudgetByCampaign y
+ *   lib/financeCampaigns.ts. El campo de Windsor se pide como "campaña"
+ *   (con tilde); la propiedad interna en `MediaPlanTarget` se sigue
+ *   llamando `campana` (sin tilde, por simplicidad de código — nada que ver
+ *   con el nombre de columna real de la hoja).
  * - presupuesto_proyectado: número plano, sin "$" ni separador de miles.
+ *
+ * Si una cuenta tiene al menos una fila con "campaña" cargada, el
+ * presupuesto de la CUENTA (fetchMediaPlanBudgetByAccount) pasa a ser la
+ * SUMA de sus campañas, no la fila de cuenta (si también existe, se
+ * ignora) — ver el comentario en esa función.
  *
  * SOLO SERVER-SIDE. No importar desde ningún componente "use client".
  */
@@ -38,6 +57,7 @@ export interface MediaPlanTarget {
   plataforma: PlatformKey;
   mes: string;
   cuenta: string;
+  campana: string; // "" = presupuesto de cuenta, sin campaña específica
   presupuesto: number;
 }
 
@@ -69,7 +89,7 @@ export async function fetchMediaPlanTargets(): Promise<{ targets: MediaPlanTarge
     const yearAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
     const params = new URLSearchParams({
       api_key: process.env.WINDSOR_API_KEY,
-      fields: "cliente,plataforma,mes,cuenta,presupuesto_proyectado",
+      fields: "cliente,plataforma,mes,cuenta,campaña,presupuesto_proyectado",
       date_from: yearAgo.toISOString().slice(0, 10),
       date_to: now.toISOString().slice(0, 10),
     });
@@ -90,6 +110,10 @@ export async function fetchMediaPlanTargets(): Promise<{ targets: MediaPlanTarge
         plataforma: String(r.plataforma ?? "").trim() as PlatformKey,
         mes: String(r.mes ?? "").trim(),
         cuenta: String(r.cuenta ?? "").trim(),
+        // Propiedad JS "campaña" (con tilde) — es el nombre real que Windsor
+        // devuelve para este campo, con bracket notation por el carácter
+        // no-ASCII (no es válido en dot notation).
+        campana: String(r["campaña"] ?? "").trim(),
         presupuesto: Number(r.presupuesto_proyectado ?? 0),
       }))
       .filter((t) => t.cuenta && t.mes);
@@ -106,7 +130,7 @@ export async function fetchMediaPlanTargets(): Promise<{ targets: MediaPlanTarge
       }
       return {
         targets: [],
-        warning: `Hoja de proyectados (Windsor.ai / Google Sheets): se leyeron ${rows.length} fila(s), pero ninguna tenía "cuenta" y "mes" completos — revisar que los encabezados de la hoja sean exactamente cliente/plataforma/mes/cuenta/presupuesto_proyectado (sin espacios ni mayúsculas distintas).`,
+        warning: `Hoja de proyectados (Windsor.ai / Google Sheets): se leyeron ${rows.length} fila(s), pero ninguna tenía "cuenta" y "mes" completos — revisar que los encabezados de la hoja sean exactamente cliente/plataforma/mes/cuenta/campaña/presupuesto_proyectado (sin espacios ni mayúsculas distintas).`,
       };
     }
 
@@ -123,6 +147,13 @@ export async function fetchMediaPlanTargets(): Promise<{ targets: MediaPlanTarge
  * Arma un mapa account_id -> presupuesto proyectado, ya filtrado al mes
  * pedido (por defecto, el mes en curso) — lo que necesita
  * fetchWindsorSpend para pisar el budget de una cuenta real.
+ *
+ * Si la cuenta tiene al menos una fila de presupuesto POR CAMPAÑA (columna
+ * "campana" completa) ese mes, el total de la cuenta es la SUMA de esas
+ * campañas — la fila de cuenta (sin "campana"), si también existe para el
+ * mismo mes, se ignora a propósito: evita mantener dos números que puedan
+ * quedar desincronizados (el total "a mano" vs. la suma real de campañas).
+ * Sin ninguna fila por campaña, se usa la fila de cuenta como siempre.
  */
 export async function fetchMediaPlanBudgetByAccount(
   now: Date = new Date()
@@ -131,9 +162,20 @@ export async function fetchMediaPlanBudgetByAccount(
   if (warning) return { byAccount: new Map(), warning };
 
   const monthKeys = currentMonthKeys(now);
+  const relevant = targets.filter((t) => monthKeys.includes(t.mes));
+
   const byAccount = new Map<string, number>();
-  targets.forEach((t) => {
-    if (monthKeys.includes(t.mes)) byAccount.set(t.cuenta, t.presupuesto);
+  const accountsWithCampaignBudget = new Set<string>();
+  relevant.forEach((t) => {
+    if (t.campana) {
+      byAccount.set(t.cuenta, (byAccount.get(t.cuenta) ?? 0) + t.presupuesto);
+      accountsWithCampaignBudget.add(t.cuenta);
+    }
+  });
+  relevant.forEach((t) => {
+    if (!t.campana && !accountsWithCampaignBudget.has(t.cuenta)) {
+      byAccount.set(t.cuenta, t.presupuesto);
+    }
   });
 
   // Hay filas leídas, pero ninguna es del mes actual — la sospecha más
@@ -149,4 +191,30 @@ export async function fetchMediaPlanBudgetByAccount(
   }
 
   return { byAccount };
+}
+
+/**
+ * Arma un mapa "cuenta:campaña" -> presupuesto proyectado, ya filtrado al
+ * mes pedido — lo que necesita lib/financeCampaigns.ts para el desglose
+ * por campaña de la vista Finanzas. Solo incluye filas con "campana"
+ * completa; las de cuenta (sin campaña) las resuelve
+ * fetchMediaPlanBudgetByAccount. No tira warning propio si viene vacío —
+ * una campaña sin presupuesto cargado es un caso normal y esperado (se
+ * muestra en $0 / "Sin objetivo cargado" en la UI, no es un error).
+ */
+export async function fetchMediaPlanBudgetByCampaign(
+  now: Date = new Date()
+): Promise<{ byCampaign: Map<string, number>; warning?: string }> {
+  const { targets, warning } = await fetchMediaPlanTargets();
+  if (warning) return { byCampaign: new Map(), warning };
+
+  const monthKeys = currentMonthKeys(now);
+  const byCampaign = new Map<string, number>();
+  targets.forEach((t) => {
+    if (t.campana && monthKeys.includes(t.mes)) {
+      byCampaign.set(`${t.cuenta}:${t.campana}`, t.presupuesto);
+    }
+  });
+
+  return { byCampaign };
 }
