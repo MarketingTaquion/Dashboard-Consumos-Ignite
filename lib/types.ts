@@ -99,6 +99,10 @@ export interface CampaignsResponse {
   platform: PlatformKey;
   campaigns: CampaignRow[];
   warnings?: string[];
+  /** "Día actual" dentro del período elegido — igual que SpendResponse.today, para calcular el presupuesto diario recomendado client-side. */
+  today: number;
+  /** Largo total del período elegido — igual que SpendResponse.daysInMonth. */
+  daysInPeriod: number;
 }
 
 /**
