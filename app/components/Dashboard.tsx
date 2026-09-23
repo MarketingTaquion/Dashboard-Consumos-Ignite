@@ -157,6 +157,12 @@ export default function Dashboard() {
   const [bannerOpen, setBannerOpen] = useState(false);
   const [sort, setSort] = useState<SortState>({ key: "pacing", dir: "desc" });
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  // Filtro opcional para enfocarse en lo activo — no reemplaza la
+  // transparencia de $0 real (sigue mostrándose por defecto, a pedido
+  // explícito de antes); esto es un toggle aparte para cuando la lista de
+  // cuentas conectadas tiene muchas sin actividad real (ej. cuentas propias
+  // de Taquión descubiertas por Windsor que nunca tuvieron gasto).
+  const [onlyActive, setOnlyActive] = useState(false);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; day: number } | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const dateMenuRef = useRef<HTMLDivElement>(null);
@@ -185,10 +191,17 @@ export default function Dashboard() {
       .catch((err) => setError(String(err?.message || err)));
   }, [datePreset]);
 
+  // "Actividad" = gasto real acumulado > 0 — no "tiene campañas" (una cuenta
+  // puede tener campañas descubiertas en $0, eso no es actividad real).
+  const visibleClients = useMemo(() => {
+    if (!data) return [];
+    return onlyActive ? data.clients.filter((c) => c.spend8 > 0) : data.clients;
+  }, [data, onlyActive]);
+
   const clientsIncluded = useMemo(() => {
     if (!data) return [];
-    return clientKey === "all" ? data.clients : data.clients.filter((c) => c.key === clientKey);
-  }, [data, clientKey]);
+    return clientKey === "all" ? visibleClients : visibleClients.filter((c) => c.key === clientKey);
+  }, [data, visibleClients, clientKey]);
 
   const series = useMemo(() => {
     if (!data) return null;
@@ -503,11 +516,17 @@ export default function Dashboard() {
       <div className="op-layout">
         <div className="card sidebar">
           <div className="eyebrow">Clientes</div>
+          <button className="toggle-chip" style={{ marginTop: 10, marginBottom: 4 }} aria-pressed={onlyActive} onClick={() => setOnlyActive((v) => !v)}>
+            <span className="toggle-track">
+              <span className="toggle-knob" />
+            </span>
+            Solo con actividad
+          </button>
           <div className="client-list">
             <button className="client-row" aria-pressed={clientKey === "all"} onClick={() => setClientKey("all")}>
               Todos los clientes
             </button>
-            {data.clients.map((c) => {
+            {visibleClients.map((c) => {
               const st = statusFor(c, today, daysInMonth);
               return (
                 <button key={c.key} className="client-row" aria-pressed={clientKey === c.key} onClick={() => setClientKey(c.key)}>
@@ -516,6 +535,7 @@ export default function Dashboard() {
                 </button>
               );
             })}
+            {visibleClients.length === 0 && <div style={{ color: "var(--text-muted)", fontSize: 12.5, padding: "8px 10px" }}>Sin cuentas con actividad.</div>}
           </div>
         </div>
 
