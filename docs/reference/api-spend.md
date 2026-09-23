@@ -46,7 +46,7 @@ Desglose por campaña de la vista Finanzas (a pedido explícito: "todas las camp
 | `campaignId` | `string` | ID real de campaña en Windsor.ai |
 | `campaignName` | `string` | Nombre real de campaña |
 | `spend` | `number` | Real, ARS |
-| `budget` | `number` | Presupuesto proyectado de la hoja madre para esa campaña puntual (columna `campana`, ver [`lib/mediaPlan.ts`](../../lib/mediaPlan.ts)); `0` si no hay fila cargada — nunca se inventa. |
+| `budget` | `number` | Presupuesto proyectado de la hoja madre para esa campaña puntual (columna `campaña`, con tilde — ver [`lib/mediaPlan.ts`](../../lib/mediaPlan.ts)); `0` si no hay fila cargada — nunca se inventa. |
 
 ### `PlatformCpl`
 

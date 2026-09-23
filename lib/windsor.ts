@@ -35,14 +35,14 @@ import { fetchMediaPlanBudgetByAccount } from "./mediaPlan";
  * Descubrimiento de cuentas en 3 capas, por cada plataforma conectada, cada
  * una cubre lo que la anterior no puede: (1) el período elegido en el
  * selector de fecha, con spend/conversiones reales; (2) una ventana ampliada
- * — SIEMPRE derivada de ese mismo período, ver `discoveryWindowFor` — para
- * encontrar cuentas con actividad reciente pero nada en el período elegido;
- * (3) endpoint de cuentas conectadas, para las que nunca tuvieron ni un
- * evento. Las capas 2 y 3 solo aportan el nombre — spend/conversiones quedan
- * en 0 si no aparecieron en la capa 1. Corrección 2026-09-22: la capa 2
- * tenía una ventana fija de 12 meses, desconectada de lo que el usuario
- * elige en el selector de período — el período elegido es el que debe
- * delimitar toda ventana temporal del dashboard, no una constante aparte.
+ * — derivada de ese mismo período pero nunca más angosta que 12 meses, ver
+ * `discoveryWindowFor` — para encontrar cuentas dormidas hace tiempo, no
+ * solo las que tuvieron actividad reciente; (3) endpoint de cuentas
+ * conectadas, para las que nunca tuvieron ni un evento. Las capas 2 y 3
+ * solo aportan el nombre — spend/conversiones quedan en 0 si no aparecieron
+ * en la capa 1. El número real (capa 1) siempre está 100% atado al período
+ * elegido; la ventana de descubrimiento es un concepto aparte, con su
+ * propio piso — ver la nota completa en `discoveryWindowFor`.
  *
  * ENFOQUE: no requiere mapear cliente↔cuenta de antemano. Trae **todas** las
  * cuentas de cada plataforma conectada en Windsor.ai (hoy: Google Ads, Meta
@@ -171,22 +171,31 @@ function parseISODate(s: string): Date {
 /**
  * Ventana de "descubrimiento" (para encontrar cuentas/campañas/anuncios
  * pausados o sin actividad en el rango elegido, que Windsor omitiría en
- * silencio en vez de devolver en $0) — SIEMPRE derivada del rango elegido
- * en el selector de período, nunca una constante fija (12 meses, 90 días,
- * etc.) desconectada de lo que el usuario configuró ahí. Corrección
- * explícita 2026-09-22: antes cada fetcher tenía su propia ventana
- * hardcodeada, independiente del filtro de período — el filtro de período
- * es el que delimita toda ventana temporal en el dashboard, no otra cosa.
+ * silencio en vez de devolver en $0) — derivada del rango elegido en el
+ * selector de período (el doble de días del período, terminando en el
+ * mismo `dateTo`), pero **nunca más angosta que 12 meses**.
  *
- * Se extiende el rango elegido hacia atrás por su propio largo (el doble
- * de días, terminando en el mismo `dateTo`) — así "Hoy" descubre apenas 2
- * días hacia atrás y "Este mes" descubre ~2 meses, proporcional en los dos
- * casos a lo que el usuario pidió ver, en vez de un número mágico fijo.
+ * Corrección 2026-09-22: antes cada fetcher tenía su propia ventana
+ * hardcodeada, independiente del filtro de período — se cambió a que
+ * dependiera solo del período elegido. Corrección 2026-09-23: eso rompió
+ * el descubrimiento real — con "Este mes" la ventana quedaba en ~2 meses,
+ * demasiado angosta para encontrar campañas pausadas hace más tiempo (caso
+ * real: las campañas de Google Ads de TQN-LC, pausadas desde antes de esa
+ * ventana, dejaron de aparecer). El número real (Capa 1, lo que se
+ * muestra) sigue 100% atado al período elegido — eso nunca cambió y está
+ * bien así. La ventana de DESCUBRIMIENTO es un concepto distinto: "cuánto
+ * atrás hay que mirar para saber si una cuenta/campaña/anuncio existe",
+ * que no tiene relación natural con qué período se está mirando ahora —
+ * por eso el piso de 12 meses (ya probado que alcanza) en vez de un
+ * multiplicador puro del período.
  */
 export function discoveryWindowFor(range: ResolvedDateRange): { dateFrom: string; dateTo: string } {
   const from = parseISODate(range.dateFrom);
-  const widened = new Date(from.getFullYear(), from.getMonth(), from.getDate() - range.daysInPeriod);
-  return { dateFrom: toISODate(widened), dateTo: range.dateTo };
+  const periodDoubled = new Date(from.getFullYear(), from.getMonth(), from.getDate() - range.daysInPeriod);
+  const dateTo = parseISODate(range.dateTo);
+  const twelveMonthsBack = new Date(dateTo.getFullYear() - 1, dateTo.getMonth(), dateTo.getDate());
+  const widest = periodDoubled.getTime() < twelveMonthsBack.getTime() ? periodDoubled : twelveMonthsBack;
+  return { dateFrom: toISODate(widest), dateTo: range.dateTo };
 }
 
 interface AccountTotals {

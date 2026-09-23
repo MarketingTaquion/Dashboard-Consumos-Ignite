@@ -17,26 +17,31 @@ import type { PlatformKey } from "./types";
  *
  * Columnas esperadas en la hoja ("Hoja maestra de proyectados - IGNITE -
  * Consumos en plataformas", ver docs/how-to/conectar-windsor.md):
- *   cliente, plataforma, mes, cuenta, campana, presupuesto_proyectado
+ *   cliente, plataforma, mes, cuenta, campaña, presupuesto_proyectado
  *
  * - cliente: texto libre (hoy no se cruza contra nada, es solo referencia
  *   humana en la hoja — el cruce real con el dashboard es por "cuenta"
- *   (+ "campana" si está completa).
+ *   (+ "campaña" si está completa).
  * - plataforma: google | meta | tiktok | linkedin.
  * - mes: "2026-09" o "2026-09-01" — se aceptan ambos formatos.
  * - cuenta: el account_id real tal cual aparece en Windsor.ai (el mismo que
  *   ya se usa como key de las filas reales en fetchWindsorSpend).
- * - campana (columna sin ñ a propósito — no verificado si Windsor maneja
- *   bien encabezados con tildes en el connector "googlesheets", mejor no
- *   arriesgar el mismo tipo de sorpresa silenciosa que ya tuvimos con otros
- *   nombres de campo): **opcional**. Vacía = presupuesto de CUENTA (como
- *   antes). Completa con el nombre exacto de campaña (tal cual aparece en
- *   Windsor / en la tabla de Campañas de Medios, copiado, no retipeado) =
- *   presupuesto específico de esa campaña. Ver fetchMediaPlanBudgetByCampaign
- *   y lib/financeCampaigns.ts.
+ * - campaña (con ñ — verificado en vivo 2026-09-23: Windsor SÍ maneja bien
+ *   encabezados con tilde en este connector; se había pedido el campo como
+ *   "campana" sin tilde por las dudas, y Windsor devolvió HTTP 400
+ *   "Unexpected field(s): {'campana'}. Did you mean: campana -> campaña" —
+ *   la cautela resultó innecesaria, el nombre real de columna es con
+ *   tilde). **Opcional**. Vacía = presupuesto de CUENTA (como antes).
+ *   Completa con el nombre exacto de campaña (tal cual aparece en Windsor /
+ *   en la tabla de Campañas de Medios, copiado, no retipeado) = presupuesto
+ *   específico de esa campaña. Ver fetchMediaPlanBudgetByCampaign y
+ *   lib/financeCampaigns.ts. El campo de Windsor se pide como "campaña"
+ *   (con tilde); la propiedad interna en `MediaPlanTarget` se sigue
+ *   llamando `campana` (sin tilde, por simplicidad de código — nada que ver
+ *   con el nombre de columna real de la hoja).
  * - presupuesto_proyectado: número plano, sin "$" ni separador de miles.
  *
- * Si una cuenta tiene al menos una fila con "campana" cargada, el
+ * Si una cuenta tiene al menos una fila con "campaña" cargada, el
  * presupuesto de la CUENTA (fetchMediaPlanBudgetByAccount) pasa a ser la
  * SUMA de sus campañas, no la fila de cuenta (si también existe, se
  * ignora) — ver el comentario en esa función.
@@ -84,7 +89,7 @@ export async function fetchMediaPlanTargets(): Promise<{ targets: MediaPlanTarge
     const yearAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
     const params = new URLSearchParams({
       api_key: process.env.WINDSOR_API_KEY,
-      fields: "cliente,plataforma,mes,cuenta,campana,presupuesto_proyectado",
+      fields: "cliente,plataforma,mes,cuenta,campaña,presupuesto_proyectado",
       date_from: yearAgo.toISOString().slice(0, 10),
       date_to: now.toISOString().slice(0, 10),
     });
@@ -105,7 +110,10 @@ export async function fetchMediaPlanTargets(): Promise<{ targets: MediaPlanTarge
         plataforma: String(r.plataforma ?? "").trim() as PlatformKey,
         mes: String(r.mes ?? "").trim(),
         cuenta: String(r.cuenta ?? "").trim(),
-        campana: String(r.campana ?? "").trim(),
+        // Propiedad JS "campaña" (con tilde) — es el nombre real que Windsor
+        // devuelve para este campo, con bracket notation por el carácter
+        // no-ASCII (no es válido en dot notation).
+        campana: String(r["campaña"] ?? "").trim(),
         presupuesto: Number(r.presupuesto_proyectado ?? 0),
       }))
       .filter((t) => t.cuenta && t.mes);
@@ -122,7 +130,7 @@ export async function fetchMediaPlanTargets(): Promise<{ targets: MediaPlanTarge
       }
       return {
         targets: [],
-        warning: `Hoja de proyectados (Windsor.ai / Google Sheets): se leyeron ${rows.length} fila(s), pero ninguna tenía "cuenta" y "mes" completos — revisar que los encabezados de la hoja sean exactamente cliente/plataforma/mes/cuenta/presupuesto_proyectado (sin espacios ni mayúsculas distintas).`,
+        warning: `Hoja de proyectados (Windsor.ai / Google Sheets): se leyeron ${rows.length} fila(s), pero ninguna tenía "cuenta" y "mes" completos — revisar que los encabezados de la hoja sean exactamente cliente/plataforma/mes/cuenta/campaña/presupuesto_proyectado (sin espacios ni mayúsculas distintas).`,
       };
     }
 
