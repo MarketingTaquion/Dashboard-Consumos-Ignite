@@ -29,7 +29,9 @@ Los 3 comparten el mismo patrón: **Capa 1** (núcleo: spend/conversions/impress
 
 ### `CampaignRow` (tipo completo en [`lib/types.ts`](../../lib/types.ts))
 
-Campos comunes a las 3 plataformas: `accountId/Name`, `campaignId/Name`, `impressions`, `clicks`, `cpm`, `ctr`, `cpl`, `conversions`. Después, campos opcionales según la plataforma — `undefined` si el campo no vino en la respuesta de Windsor (nunca se fabrica un 0 donde no hay dato):
+Campos comunes a las 3 plataformas: `accountId/Name`, `campaignId/Name`, `impressions`, `clicks`, `spend`, `cpm`, `ctr`, `cpl`, `conversions`, `budget`. Después, campos opcionales según la plataforma — `undefined` si el campo no vino en la respuesta de Windsor (nunca se fabrica un 0 donde no hay dato):
+
+`budget` (Presupuesto proyectado) NO viene de Windsor — se cruza en [`app/api/campaigns/route.ts`](../../app/api/campaigns/route.ts) llamando a `fetchMediaPlanBudgetByCampaign()` ([`lib/mediaPlan.ts`](../../lib/mediaPlan.ts)), por `accountId:campaignName`; `0` si no hay fila cargada en la hoja madre para esa campaña. Los fetchers de campaña (`windsorCampaigns.ts`/`windsorMeta.ts`/`windsorTiktok.ts`) ponen `budget: 0` como placeholder — siempre se pisa en el route, nunca se usa ese valor.
 
 - **Google Ads**: `searchImpressionShare`, `qualityScore`, `searchBudgetLostIS`, `searchRankLostIS`, `searchAbsoluteTopIS`, `searchTopIS`, `optimizationScore`.
 - **Meta Ads y TikTok Ads**: `reach`, `frequency`.

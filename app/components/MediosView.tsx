@@ -213,6 +213,8 @@ export default function MediosView() {
               <tr>
                 <th>Cuenta</th>
                 <th>Campaña</th>
+                <th className="num">Presupuesto proyectado</th>
+                <th className="num">Real</th>
                 <th className="num">Impr.</th>
                 <th className="num">Clicks</th>
                 <th className="num">CPM</th>
@@ -247,7 +249,7 @@ export default function MediosView() {
             <tbody>
               {data.campaigns.length === 0 ? (
                 <tr>
-                  <td colSpan={8 + extraColCount(platform)} style={{ color: "var(--text-muted)" }}>
+                  <td colSpan={10 + extraColCount(platform)} style={{ color: "var(--text-muted)" }}>
                     Sin campañas para mostrar.
                   </td>
                 </tr>
@@ -256,6 +258,8 @@ export default function MediosView() {
                   <tr key={c.accountId + ":" + c.campaignId}>
                     <td>{c.accountName}</td>
                     <td>{c.campaignName}</td>
+                    <td className="num">{fmtMoney(c.budget)}</td>
+                    <td className="num">{fmtMoney(c.spend)}</td>
                     <td className="num">{fmtInt(c.impressions)}</td>
                     <td className="num">{fmtInt(c.clicks)}</td>
                     <td className="num">{fmtMoney(c.cpm)}</td>

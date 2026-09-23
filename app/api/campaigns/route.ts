@@ -3,6 +3,7 @@ import { fetchGoogleAdsCampaigns } from "@/lib/windsorCampaigns";
 import { fetchMetaCampaigns } from "@/lib/windsorMeta";
 import { fetchTiktokCampaigns } from "@/lib/windsorTiktok";
 import { hasWindsorCredentials, DATE_RANGE_KEYS, type DateRangeKey } from "@/lib/windsor";
+import { fetchMediaPlanBudgetByCampaign } from "@/lib/mediaPlan";
 import { MOCK_CAMPAIGNS } from "@/lib/mockCampaigns";
 import type { CampaignRow, CampaignsResponse, PlatformKey } from "@/lib/types";
 
@@ -67,12 +68,24 @@ export async function GET(request: Request) {
   }
 
   try {
-    const { campaigns, warnings } = await fetchCampaignsForPlatform(platform, rangeKey);
+    // Presupuesto proyectado por campaña (hoja madre) en paralelo — cruce
+    // aparte de los datos de Windsor, no vive en los fetchers de campaña
+    // (esos son solo de Windsor). Mismo mecanismo que ya usa
+    // lib/financeCampaigns.ts para Finanzas.
+    const [{ campaigns, warnings }, budgets] = await Promise.all([
+      fetchCampaignsForPlatform(platform, rangeKey),
+      fetchMediaPlanBudgetByCampaign(),
+    ]);
+    const campaignsWithBudget: CampaignRow[] = campaigns.map((c) => ({
+      ...c,
+      budget: budgets.byCampaign.get(`${c.accountId}:${c.campaignName}`) ?? 0,
+    }));
+    const allWarnings = budgets.warning ? [...warnings, budgets.warning] : warnings;
     const body: CampaignsResponse = {
-      source: campaigns.length > 0 ? "windsor" : "mock",
+      source: campaignsWithBudget.length > 0 ? "windsor" : "mock",
       platform,
-      campaigns: campaigns.length > 0 ? campaigns : MOCK_CAMPAIGNS[platform] ?? [],
-      warnings: warnings.length ? warnings : undefined,
+      campaigns: campaignsWithBudget.length > 0 ? campaignsWithBudget : MOCK_CAMPAIGNS[platform] ?? [],
+      warnings: allWarnings.length ? allWarnings : undefined,
     };
     return NextResponse.json(body);
   } catch (err: any) {

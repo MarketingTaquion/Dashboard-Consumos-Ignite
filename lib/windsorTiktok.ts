@@ -160,6 +160,7 @@ export async function fetchTiktokCampaigns(rangeKey: DateRangeKey = "month"): Pr
       impressions: acc.impressions,
       clicks: acc.clicks,
       spend: acc.spend,
+      budget: 0, // se pisa en app/api/campaigns/route.ts con el presupuesto real de la hoja madre
       cpm: acc.impressions > 0 ? (acc.spend / acc.impressions) * 1000 : 0,
       ctr: acc.impressions > 0 ? (acc.clicks / acc.impressions) * 100 : 0,
       cpl: acc.conversions > 0 ? acc.spend / acc.conversions : 0,
