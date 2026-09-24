@@ -26,10 +26,12 @@ Las cuentas reales aparecen con `$0` de objetivo y "Sin objetivo cargado" hasta 
 | `plataforma` | `google`, `meta`, `tiktok` o `linkedin` | `google` |
 | `mes` | `2026-09` o `2026-09-01` (los 2 formatos sirven) | `2026-09` |
 | `cuenta` | el `account_id` real tal cual aparece en Windsor.ai — es lo que cruza esta fila con la cuenta real del dashboard | `6551720043` |
-| `campaña` | **opcional** — con tilde (verificado en vivo 2026-09-23: Windsor maneja bien encabezados con tilde en este connector; se había probado sin tilde por las dudas y Windsor devolvió HTTP 400 pidiendo el nombre con tilde). Vacía = presupuesto de la CUENTA entera (como antes). Completa con el nombre exacto de campaña (copiado de Windsor/de la tabla de Campañas de Medios, no retipeado) = presupuesto específico de esa campaña, que se ve desglosado en la vista Finanzas | `TQN_AON_META_INTERACCION_RMARCA_MANUAL_LA_COMUNIDAD` |
+| `campaña` (o `campana`) | **opcional** — escribila con tilde en la hoja; el dashboard prueba las dos grafías contra Windsor y usa la que acepte (ver nota abajo). Vacía = presupuesto de la CUENTA entera (como antes). Completa con el nombre exacto de campaña (copiado de Windsor/de la tabla de Campañas de Medios, no retipeado) = presupuesto específico de esa campaña, que se ve desglosado en la vista Finanzas | `TQN_AON_META_INTERACCION_RMARCA_MANUAL_LA_COMUNIDAD` |
 | `presupuesto_proyectado` | número plano, sin `$` ni separador de miles | `1200000` |
 
 Si una cuenta tiene al menos una fila con `campaña` cargada para el mes, el presupuesto de la CUENTA (el que se ve en Finanzas a nivel cuenta y en los chips de arriba) pasa a ser la **suma de sus campañas** — la fila de cuenta (sin `campaña`), si también existe, se ignora a propósito para no mantener dos números que puedan desincronizarse.
+
+⚠️ **Sobre la tilde de `campaña`**: el nombre real de esta columna, tal como lo expone el connector de Windsor, cambió de grafía dos veces en vivo sin que se tocara la hoja (primero pedía "campaña" con tilde y rechazaba "campana"; después, al revés). No se llegó a determinar la causa exacta del lado de Windsor. Por eso `fetchMediaPlanTargets()` en `lib/mediaPlan.ts` ya no asume una sola grafía: prueba `campaña` y, si Windsor la rechaza puntualmente por ese campo, reintenta con `campana`. Si en el futuro Windsor deja de aceptar las dos, el warning en pantalla ("Hoja de proyectados... falló la consulta") va a traer el detalle de ambos intentos.
 
 Para conectarla, son **2 pasos** en Windsor.ai — los dos hacen falta, no alcanza con el primero:
 
