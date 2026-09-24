@@ -750,7 +750,12 @@ export default function Dashboard() {
                 ) : (
                   sortedRows.map((r, i) => {
                     const rowKey = r.clientKey + "|" + r.platKey;
-                    const hasCampaigns = !!r.campaigns && r.campaigns.length > 0;
+                    // Mismo criterio de "Solo con actividad" que ya filtra
+                    // cuentas — acá aplicado a las campañas anidadas, para
+                    // que una cuenta con actividad no siga mostrando sus
+                    // campañas individuales en $0 al expandirla.
+                    const rowCampaigns = onlyActive ? (r.campaigns ?? []).filter((c) => c.spend > 0) : r.campaigns ?? [];
+                    const hasCampaigns = rowCampaigns.length > 0;
                     const isExpanded = hasCampaigns && expandedRows.has(rowKey);
                     return (
                       <Fragment key={rowKey || i}>
@@ -799,7 +804,7 @@ export default function Dashboard() {
                           </td>
                         </tr>
                         {isExpanded &&
-                          r.campaigns!.map((camp) => {
+                          rowCampaigns.map((camp) => {
                             const cst = statusForBudgetSpend(camp.budget, camp.spend, today, daysInMonth);
                             const cPacingPct = camp.budget === 0 ? 0 : (camp.spend / camp.budget) * 100;
                             const cRemaining = camp.budget - camp.spend;
