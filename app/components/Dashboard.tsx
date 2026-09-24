@@ -156,7 +156,6 @@ export default function Dashboard() {
   const [customTo, setCustomTo] = useState("");
   const [bannerOpen, setBannerOpen] = useState(false);
   const [sort, setSort] = useState<SortState>({ key: "pacing", dir: "desc" });
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   // Filtro opcional para enfocarse en lo activo — no reemplaza la
   // transparencia de $0 real (sigue mostrándose en cuanto se apaga el
   // toggle, a pedido explícito de antes); es un filtro aparte para cuando
@@ -307,15 +306,6 @@ export default function Dashboard() {
       });
     });
   });
-
-  function toggleExpanded(rowKey: string) {
-    setExpandedRows((prev) => {
-      const next = new Set(prev);
-      if (next.has(rowKey)) next.delete(rowKey);
-      else next.add(rowKey);
-      return next;
-    });
-  }
 
   function sortVal(r: Row): number {
     switch (sort.key) {
@@ -755,24 +745,14 @@ export default function Dashboard() {
                     // que una cuenta con actividad no siga mostrando sus
                     // campañas individuales en $0 al expandirla.
                     const rowCampaigns = onlyActive ? (r.campaigns ?? []).filter((c) => c.spend > 0) : r.campaigns ?? [];
+                    // El desglose por campaña queda siempre visible cuando la
+                    // cuenta tiene campañas — a pedido explícito 2026-09-24,
+                    // ya no hace falta expandir fila por fila.
                     const hasCampaigns = rowCampaigns.length > 0;
-                    const isExpanded = hasCampaigns && expandedRows.has(rowKey);
                     return (
                       <Fragment key={rowKey || i}>
                         <tr>
-                          <td>
-                            {hasCampaigns && (
-                              <button
-                                className="row-expand-btn"
-                                aria-expanded={isExpanded}
-                                aria-label={isExpanded ? "Ocultar campañas" : "Ver campañas"}
-                                onClick={() => toggleExpanded(rowKey)}
-                              >
-                                {isExpanded ? "▾" : "▸"}
-                              </button>
-                            )}
-                            {r.clientName}
-                          </td>
+                          <td>{r.clientName}</td>
                           <td>
                             <span className="plat-dot" style={{ background: `var(${r.platVar})` }} />
                             {r.platLabel}
@@ -803,7 +783,7 @@ export default function Dashboard() {
                             </span>
                           </td>
                         </tr>
-                        {isExpanded &&
+                        {hasCampaigns &&
                           rowCampaigns.map((camp) => {
                             const cst = statusForBudgetSpend(camp.budget, camp.spend, today, daysInMonth);
                             const cPacingPct = camp.budget === 0 ? 0 : (camp.spend / camp.budget) * 100;

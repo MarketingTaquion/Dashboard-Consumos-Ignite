@@ -246,12 +246,8 @@ table.dense th.sortable:hover { color: var(--text-secondary); }
 .sort-ico.active { color: var(--accent); }
 table.dense tbody tr:nth-child(even) td { background: var(--surface-2); }
 
-/* Desglose por campaña (Finanzas) — filas anidadas debajo de la cuenta */
-.row-expand-btn {
-  background: none; border: none; cursor: pointer; padding: 2px 5px; margin-right: 4px;
-  font-size: 10px; color: var(--text-muted); border-radius: 4px; vertical-align: 1px;
-}
-.row-expand-btn:hover { color: var(--text-primary); background: var(--surface-2); }
+/* Desglose por campaña (Finanzas) — filas anidadas debajo de la cuenta,
+   siempre visibles cuando la cuenta tiene campañas (sin botón de expandir). */
 table.dense tbody tr.campaign-subrow td { background: var(--surface-2); }
 tr.campaign-subrow td { padding-left: 14px; font-size: 12px; border-top: 1px dashed var(--border); }
 tr.campaign-subrow .campaign-name-cell { color: var(--text-secondary); padding-left: 30px; overflow-wrap: anywhere; }
