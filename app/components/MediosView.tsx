@@ -84,6 +84,11 @@ export default function MediosView() {
   const [customTo, setCustomTo] = useState("");
   const [data, setData] = useState<CampaignsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Mismo filtro que Finanzas (Dashboard.tsx) — acá por campaña en vez de
+  // por cuenta: oculta campañas sin gasto real en el período elegido.
+  // Activado por defecto (a pedido explícito 2026-09-24), en los 2
+  // usuarios por igual.
+  const [onlyActive, setOnlyActive] = useState(true);
   const dateMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -129,11 +134,15 @@ export default function MediosView() {
   const activeLabel = PLATFORMS.find((p) => p.key === platform)?.label ?? platform;
   const dateLabel = DATE_PRESETS.find((d) => d.key === datePreset)?.label ?? "Este mes";
 
+  // "Actividad" = gasto real > 0 — no "tiene presupuesto cargado" (mismo
+  // criterio que Finanzas). Alimenta tanto la tabla como los totales de abajo.
+  const visibleCampaigns = onlyActive ? data.campaigns.filter((c) => c.spend > 0) : data.campaigns;
+
   // Totales — suma de las campañas que se están mostrando (plataforma +
-  // período elegidos), mismo par "Total presupuesto"/"Total gastado" que ya
-  // tiene Finanzas arriba de su tabla.
-  const totalBudget = data.campaigns.reduce((sum, c) => sum + c.budget, 0);
-  const totalSpend = data.campaigns.reduce((sum, c) => sum + c.spend, 0);
+  // período + filtro de actividad elegidos), mismo par "Total presupuesto"/
+  // "Total gastado" que ya tiene Finanzas arriba de su tabla.
+  const totalBudget = visibleCampaigns.reduce((sum, c) => sum + c.budget, 0);
+  const totalSpend = visibleCampaigns.reduce((sum, c) => sum + c.spend, 0);
 
   return (
     <div className="wrap">
@@ -230,6 +239,12 @@ export default function MediosView() {
             <span className="stat-label">Total gastado</span>
             <span className="stat-value num">{fmtCompact(totalSpend)}</span>
           </div>
+          <button className="toggle-chip" aria-pressed={onlyActive} onClick={() => setOnlyActive((v) => !v)}>
+            <span className="toggle-track">
+              <span className="toggle-knob" />
+            </span>
+            Solo con actividad
+          </button>
         </div>
         <div className="chip-row">
           {PLATFORMS.map((p) => (
@@ -289,14 +304,14 @@ export default function MediosView() {
               </tr>
             </thead>
             <tbody>
-              {data.campaigns.length === 0 ? (
+              {visibleCampaigns.length === 0 ? (
                 <tr>
                   <td colSpan={11 + extraColCount(platform)} style={{ color: "var(--text-muted)" }}>
-                    Sin campañas para mostrar.
+                    {onlyActive && data.campaigns.length > 0 ? "Sin campañas con actividad para mostrar." : "Sin campañas para mostrar."}
                   </td>
                 </tr>
               ) : (
-                data.campaigns.map((c) => {
+                visibleCampaigns.map((c) => {
                   const daily = dailyRecommended(c.budget, c.spend, data.today, data.daysInPeriod);
                   return (
                   <tr key={c.accountId + ":" + c.campaignId}>

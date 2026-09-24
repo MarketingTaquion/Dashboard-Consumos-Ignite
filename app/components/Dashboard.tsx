@@ -158,11 +158,14 @@ export default function Dashboard() {
   const [sort, setSort] = useState<SortState>({ key: "pacing", dir: "desc" });
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   // Filtro opcional para enfocarse en lo activo — no reemplaza la
-  // transparencia de $0 real (sigue mostrándose por defecto, a pedido
-  // explícito de antes); esto es un toggle aparte para cuando la lista de
-  // cuentas conectadas tiene muchas sin actividad real (ej. cuentas propias
-  // de Taquión descubiertas por Windsor que nunca tuvieron gasto).
-  const [onlyActive, setOnlyActive] = useState(false);
+  // transparencia de $0 real (sigue mostrándose en cuanto se apaga el
+  // toggle, a pedido explícito de antes); es un filtro aparte para cuando
+  // la lista de cuentas conectadas tiene muchas sin actividad real (ej.
+  // cuentas propias de Taquión descubiertas por Windsor que nunca tuvieron
+  // gasto). Arranca ACTIVADO por defecto (a pedido explícito 2026-09-24) —
+  // el caso común es mirar la cartera con actividad, no las cuentas
+  // dormidas.
+  const [onlyActive, setOnlyActive] = useState(true);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; day: number } | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const dateMenuRef = useRef<HTMLDivElement>(null);
