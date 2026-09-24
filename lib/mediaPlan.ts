@@ -26,19 +26,24 @@ import type { PlatformKey } from "./types";
  * - mes: "2026-09" o "2026-09-01" — se aceptan ambos formatos.
  * - cuenta: el account_id real tal cual aparece en Windsor.ai (el mismo que
  *   ya se usa como key de las filas reales en fetchWindsorSpend).
- * - campaña (con ñ — verificado en vivo 2026-09-23: Windsor SÍ maneja bien
- *   encabezados con tilde en este connector; se había pedido el campo como
- *   "campana" sin tilde por las dudas, y Windsor devolvió HTTP 400
- *   "Unexpected field(s): {'campana'}. Did you mean: campana -> campaña" —
- *   la cautela resultó innecesaria, el nombre real de columna es con
- *   tilde). **Opcional**. Vacía = presupuesto de CUENTA (como antes).
- *   Completa con el nombre exacto de campaña (tal cual aparece en Windsor /
- *   en la tabla de Campañas de Medios, copiado, no retipeado) = presupuesto
- *   específico de esa campaña. Ver fetchMediaPlanBudgetByCampaign y
- *   lib/financeCampaigns.ts. El campo de Windsor se pide como "campaña"
- *   (con tilde); la propiedad interna en `MediaPlanTarget` se sigue
- *   llamando `campana` (sin tilde, por simplicidad de código — nada que ver
- *   con el nombre de columna real de la hoja).
+ * - campaña / campana (con o sin tilde — ver nota abajo). **Opcional**.
+ *   Vacía = presupuesto de CUENTA (como antes). Completa con el nombre
+ *   exacto de campaña (tal cual aparece en Windsor / en la tabla de
+ *   Campañas de Medios, copiado, no retipeado) = presupuesto específico de
+ *   esa campaña. Ver fetchMediaPlanBudgetByCampaign y lib/financeCampaigns.ts.
+ *
+ *   ⚠️ El nombre de ESTA columna en particular, tal como lo expone el
+ *   connector de Windsor, cambió de grafía dos veces en vivo sin que
+ *   nosotros tocáramos la hoja: primero pedía "campaña" (con tilde) y
+ *   rechazaba "campana" (2026-09-23), después empezó a rechazar "campaña" y
+ *   pedir "campana" (2026-09-24) — mismo error HTTP 400 "unknown_field" en
+ *   ambos casos, solo invertido. No se pudo determinar la causa exacta
+ *   (probablemente algo del lado de Windsor al resincronizar el header de
+ *   la hoja), así que en vez de perseguir una sola grafía "correcta",
+ *   fetchMediaPlanTargets() prueba las dos (ver CAMPANA_FIELD_CANDIDATES)
+ *   y usa la primera que Windsor acepte. La propiedad interna en
+ *   `MediaPlanTarget` se sigue llamando `campana` (sin tilde) pase lo que
+ *   pase con el nombre real de columna.
  * - presupuesto_proyectado: número plano, sin "$" ni separador de miles.
  *
  * Si una cuenta tiene al menos una fila con "campaña" cargada, el
@@ -51,6 +56,10 @@ import type { PlatformKey } from "./types";
 
 const WINDSOR_BASE_URL = "https://connectors.windsor.ai";
 const SHEETS_CONNECTOR = "googlesheets";
+
+// Las 2 grafías que la columna de campaña mostró en vivo — ver nota arriba.
+// Se prueban en este orden; la primera que Windsor acepte gana.
+const CAMPANA_FIELD_CANDIDATES = ["campaña", "campana"] as const;
 
 export interface MediaPlanTarget {
   cliente: string;
@@ -87,21 +96,45 @@ export async function fetchMediaPlanTargets(): Promise<{ targets: MediaPlanTarge
     // próximo sync no sea inmediato.
     const now = new Date();
     const yearAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
-    const params = new URLSearchParams({
-      api_key: process.env.WINDSOR_API_KEY,
-      fields: "cliente,plataforma,mes,cuenta,campaña,presupuesto_proyectado",
+    const dateParams = {
       date_from: yearAgo.toISOString().slice(0, 10),
       date_to: now.toISOString().slice(0, 10),
-    });
-    const res = await fetch(`${WINDSOR_BASE_URL}/${SHEETS_CONNECTOR}?${params.toString()}`, { cache: "no-store" });
-    if (!res.ok) {
+    };
+
+    // Probamos las grafías candidatas de la columna de campaña en orden —
+    // ver CAMPANA_FIELD_CANDIDATES. Solo pasamos a la siguiente si Windsor
+    // rechaza específicamente ESE campo ("unknown_field" mencionándolo);
+    // cualquier otro error (API key, hoja no conectada, etc.) corta acá,
+    // reintentar con otro nombre de columna no lo va a arreglar.
+    let rows: any[] | null = null;
+    let campanaField: string = CAMPANA_FIELD_CANDIDATES[0];
+    const fieldAttemptErrors: string[] = [];
+    for (const field of CAMPANA_FIELD_CANDIDATES) {
+      const params = new URLSearchParams({
+        api_key: process.env.WINDSOR_API_KEY,
+        fields: `cliente,plataforma,mes,cuenta,${field},presupuesto_proyectado`,
+        ...dateParams,
+      });
+      const res = await fetch(`${WINDSOR_BASE_URL}/${SHEETS_CONNECTOR}?${params.toString()}`, { cache: "no-store" });
+      if (res.ok) {
+        const json = await res.json();
+        const r = Array.isArray(json) ? json : json?.data;
+        if (!Array.isArray(r)) {
+          throw new Error("Respuesta inesperada de Windsor.ai (hoja de proyectados) — ni array ni { data: [...] }");
+        }
+        rows = r;
+        campanaField = field;
+        break;
+      }
       const t = await res.text().catch(() => "");
+      if (res.status === 400 && /unknown_field/i.test(t) && t.includes(field)) {
+        fieldAttemptErrors.push(`campo "${field}": ${t.slice(0, 150)}`);
+        continue;
+      }
       throw new Error(`HTTP ${res.status} — ${t.slice(0, 200)}`);
     }
-    const json = await res.json();
-    const rows = Array.isArray(json) ? json : json?.data;
-    if (!Array.isArray(rows)) {
-      throw new Error("Respuesta inesperada de Windsor.ai (hoja de proyectados) — ni array ni { data: [...] }");
+    if (rows === null) {
+      throw new Error(`Windsor rechazó todas las grafías probadas para la columna de campaña — ${fieldAttemptErrors.join(" | ")}`);
     }
 
     const targets: MediaPlanTarget[] = rows
@@ -110,10 +143,9 @@ export async function fetchMediaPlanTargets(): Promise<{ targets: MediaPlanTarge
         plataforma: String(r.plataforma ?? "").trim() as PlatformKey,
         mes: String(r.mes ?? "").trim(),
         cuenta: String(r.cuenta ?? "").trim(),
-        // Propiedad JS "campaña" (con tilde) — es el nombre real que Windsor
-        // devuelve para este campo, con bracket notation por el carácter
-        // no-ASCII (no es válido en dot notation).
-        campana: String(r["campaña"] ?? "").trim(),
+        // Bracket notation porque `campanaField` puede ser "campaña" (con
+        // tilde, no válido en dot notation) según cuál haya aceptado Windsor.
+        campana: String(r[campanaField] ?? "").trim(),
         presupuesto: Number(r.presupuesto_proyectado ?? 0),
       }))
       .filter((t) => t.cuenta && t.mes);
