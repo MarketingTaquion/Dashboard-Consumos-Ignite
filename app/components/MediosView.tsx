@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { CampaignsResponse, PlatformKey } from "@/lib/types";
+import type { CampaignRow, CampaignsResponse, PlatformKey } from "@/lib/types";
 
 const PLATFORMS: { key: PlatformKey; label: string; varName: string }[] = [
   { key: "google", label: "Google Ads", varName: "--plat-google" },
@@ -76,13 +76,28 @@ function fmtDailySigned(n: number): string {
   return (n >= 0 ? "+" : "") + fmtMoney(n);
 }
 
+// Fila de campaña ya combinada entre plataformas — CampaignRow + de qué
+// plataforma vino, para poder mostrar la columna "Plataforma" y elegir sus
+// columnas específicas cuando corresponde.
+type MergedRow = CampaignRow & { platform: PlatformKey };
+
 export default function MediosView() {
-  const [platform, setPlatform] = useState<PlatformKey>("google");
+  // Antes era selección única (un solo booleano `platform`) — a pedido
+  // explícito 2026-09-25 pasa a multi-selección, para poder tener varias
+  // plataformas prendidas a la vez sin que una apague a la otra. Arranca
+  // solo con Google Ads activo, igual que el default anterior; el resto se
+  // prende a mano.
+  // Partial: PlatformKey incluye "linkedin" (usado en Finanzas), que no
+  // existe en el PLATFORMS de esta vista — no hace falta una entrada para él.
+  const [platformsEnabled, setPlatformsEnabled] = useState<Partial<Record<PlatformKey, boolean>>>({
+    google: true,
+  });
   const [datePreset, setDatePreset] = useState<DatePreset>("month");
   const [dateMenuOpen, setDateMenuOpen] = useState(false);
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
-  const [data, setData] = useState<CampaignsResponse | null>(null);
+  // Un fetch por plataforma activa — se combinan en una sola tabla más abajo.
+  const [dataByPlatform, setDataByPlatform] = useState<Partial<Record<PlatformKey, CampaignsResponse>>>({});
   const [error, setError] = useState<string | null>(null);
   // Mismo filtro que Finanzas (Dashboard.tsx) — acá por campaña en vez de
   // por cuenta: oculta campañas sin gasto real en el período elegido.
@@ -90,6 +105,9 @@ export default function MediosView() {
   // usuarios por igual.
   const [onlyActive, setOnlyActive] = useState(true);
   const dateMenuRef = useRef<HTMLDivElement>(null);
+
+  const enabledKeys = PLATFORMS.filter((p) => platformsEnabled[p.key]).map((p) => p.key);
+  const enabledKeysDep = enabledKeys.join(",");
 
   useEffect(() => {
     if (!dateMenuOpen) return;
@@ -103,18 +121,38 @@ export default function MediosView() {
   }, [dateMenuOpen]);
 
   useEffect(() => {
-    setData(null);
+    setError(null);
+    setDataByPlatform({});
     // "custom" todavía no está conectado (ver nota en el menú de fecha) — se
     // sigue pidiendo "month" hasta que se implemente el rango personalizado.
     const range = datePreset === "custom" ? "month" : datePreset;
-    fetch(`/api/campaigns?platform=${platform}&range=${range}`)
-      .then((r) => {
-        if (!r.ok) throw new Error("HTTP " + r.status);
-        return r.json();
+    const keys = enabledKeysDep.split(",").filter(Boolean) as PlatformKey[];
+    Promise.all(
+      keys.map((key) =>
+        fetch(`/api/campaigns?platform=${key}&range=${range}`)
+          .then((r) => {
+            if (!r.ok) throw new Error("HTTP " + r.status);
+            return r.json();
+          })
+          .then((body: CampaignsResponse) => [key, body] as const)
+      )
+    )
+      .then((results) => {
+        const next: Partial<Record<PlatformKey, CampaignsResponse>> = {};
+        results.forEach(([key, body]) => {
+          next[key] = body;
+        });
+        setDataByPlatform(next);
       })
-      .then((body: CampaignsResponse) => setData(body))
       .catch((err) => setError(String(err?.message || err)));
-  }, [platform, datePreset]);
+  }, [enabledKeysDep, datePreset]);
+
+  function togglePlatform(key: PlatformKey) {
+    // No se puede apagar la última plataforma activa — siempre tiene que
+    // quedar al menos una, si no la tabla queda sin sentido.
+    if (platformsEnabled[key] && enabledKeys.length === 1) return;
+    setPlatformsEnabled((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
 
   if (error) {
     return (
@@ -123,7 +161,8 @@ export default function MediosView() {
       </div>
     );
   }
-  if (!data) {
+  const loaded = enabledKeys.length > 0 && enabledKeys.every((k) => dataByPlatform[k]);
+  if (!loaded) {
     return (
       <div className="wrap">
         <div className="loading-state">Cargando campañas…</div>
@@ -131,14 +170,27 @@ export default function MediosView() {
     );
   }
 
-  const activeLabel = PLATFORMS.find((p) => p.key === platform)?.label ?? platform;
+  const showCombined = enabledKeys.length > 1;
+  const singlePlatform = !showCombined ? enabledKeys[0] : undefined;
+  const activeLabel = enabledKeys.map((k) => PLATFORMS.find((p) => p.key === k)?.label ?? k).join(" + ");
   const dateLabel = DATE_PRESETS.find((d) => d.key === datePreset)?.label ?? "Este mes";
+
+  const allCampaigns: MergedRow[] = [];
+  enabledKeys.forEach((k) => {
+    dataByPlatform[k]?.campaigns.forEach((c) => allCampaigns.push({ ...c, platform: k }));
+  });
+  const allMock = enabledKeys.every((k) => dataByPlatform[k]?.source === "mock");
+  const mergedWarnings = [...new Set(enabledKeys.flatMap((k) => dataByPlatform[k]?.warnings ?? []))];
+  // today/daysInPeriod son iguales para todas las plataformas activas (se
+  // derivan solo del rango de fecha elegido, no del dato de cada una).
+  const today = dataByPlatform[enabledKeys[0]]?.today ?? 0;
+  const daysInPeriod = dataByPlatform[enabledKeys[0]]?.daysInPeriod ?? 0;
 
   // "Actividad" = gasto real > 0 — no "tiene presupuesto cargado" (mismo
   // criterio que Finanzas). Alimenta tanto la tabla como los totales de abajo.
-  const visibleCampaigns = onlyActive ? data.campaigns.filter((c) => c.spend > 0) : data.campaigns;
+  const visibleCampaigns = onlyActive ? allCampaigns.filter((c) => c.spend > 0) : allCampaigns;
 
-  // Totales — suma de las campañas que se están mostrando (plataforma +
+  // Totales — suma de las campañas que se están mostrando (plataformas +
   // período + filtro de actividad elegidos), mismo par "Total presupuesto"/
   // "Total gastado" que ya tiene Finanzas arriba de su tabla.
   const totalBudget = visibleCampaigns.reduce((sum, c) => sum + c.budget, 0);
@@ -166,12 +218,12 @@ export default function MediosView() {
         <a href="/medios/comparacion">Comparación de plataformas</a>
       </nav>
 
-      {data.warnings?.map((w, i) => (
+      {mergedWarnings.map((w, i) => (
         <div className="mock-note" key={i}>
           <span className="tq-arrow" style={{ color: "var(--status-warning)" }}>↘</span> <span>{w}</span>
         </div>
       ))}
-      {data.source === "mock" && !data.warnings && (
+      {allMock && mergedWarnings.length === 0 && (
         <div className="mock-note">
           <span className="tq-arrow">↘</span>{" "}
           <span>
@@ -248,7 +300,7 @@ export default function MediosView() {
         </div>
         <div className="chip-row">
           {PLATFORMS.map((p) => (
-            <button key={p.key} className="chip plat" aria-pressed={platform === p.key} onClick={() => setPlatform(p.key)}>
+            <button key={p.key} className="chip plat" aria-pressed={!!platformsEnabled[p.key]} onClick={() => togglePlatform(p.key)}>
               <span className="dot" style={{ background: `var(${p.varName})` }} />
               {p.label}
             </button>
@@ -259,15 +311,18 @@ export default function MediosView() {
       <div className="card">
         <h2>Campañas — {activeLabel}</h2>
         <div className="card-sub">
-          {platform === "google" && "Métricas comunes + cuota de subasta y calidad, propias de Google Ads."}
-          {platform === "meta" && "Métricas comunes + alcance y frecuencia, propias de campañas de alcance/awareness."}
-          {platform === "tiktok" && "Métricas comunes + alcance, frecuencia y video — el formato nativo de la plataforma."}
+          {showCombined &&
+            "Métricas comunes a las plataformas seleccionadas. Para cuota de subasta/calidad, alcance o video, elegí una sola plataforma a la vez."}
+          {singlePlatform === "google" && "Métricas comunes + cuota de subasta y calidad, propias de Google Ads."}
+          {singlePlatform === "meta" && "Métricas comunes + alcance y frecuencia, propias de campañas de alcance/awareness."}
+          {singlePlatform === "tiktok" && "Métricas comunes + alcance, frecuencia y video — el formato nativo de la plataforma."}
         </div>
         <div className="table-scroll-x" style={{ marginTop: 14 }}>
           <table className="dense">
             <thead>
               <tr>
                 <th>Cuenta</th>
+                {showCombined && <th>Plataforma</th>}
                 <th>Campaña</th>
                 <th className="num">Presupuesto proyectado</th>
                 <th className="num">Real</th>
@@ -278,7 +333,7 @@ export default function MediosView() {
                 <th className="num">CTR</th>
                 <th className="num">CPL</th>
                 <th className="num">Conv.</th>
-                {platform === "google" && (
+                {singlePlatform === "google" && (
                   <>
                     <th className="num">Cuota impr.</th>
                     <th className="num">Nivel calidad</th>
@@ -289,13 +344,13 @@ export default function MediosView() {
                     <th className="num">Punt. optim.</th>
                   </>
                 )}
-                {(platform === "meta" || platform === "tiktok") && (
+                {(singlePlatform === "meta" || singlePlatform === "tiktok") && (
                   <>
                     <th className="num">Alcance</th>
                     <th className="num">Frec.</th>
                   </>
                 )}
-                {platform === "tiktok" && (
+                {singlePlatform === "tiktok" && (
                   <>
                     <th className="num">Tiempo prom.</th>
                     <th className="num">Likes</th>
@@ -306,16 +361,26 @@ export default function MediosView() {
             <tbody>
               {visibleCampaigns.length === 0 ? (
                 <tr>
-                  <td colSpan={11 + extraColCount(platform)} style={{ color: "var(--text-muted)" }}>
-                    {onlyActive && data.campaigns.length > 0 ? "Sin campañas con actividad para mostrar." : "Sin campañas para mostrar."}
+                  <td
+                    colSpan={11 + (showCombined ? 1 : extraColCount(singlePlatform!))}
+                    style={{ color: "var(--text-muted)" }}
+                  >
+                    {onlyActive && allCampaigns.length > 0 ? "Sin campañas con actividad para mostrar." : "Sin campañas para mostrar."}
                   </td>
                 </tr>
               ) : (
                 visibleCampaigns.map((c) => {
-                  const daily = dailyRecommended(c.budget, c.spend, data.today, data.daysInPeriod);
+                  const daily = dailyRecommended(c.budget, c.spend, today, daysInPeriod);
+                  const platMeta = PLATFORMS.find((p) => p.key === c.platform);
                   return (
-                  <tr key={c.accountId + ":" + c.campaignId}>
+                  <tr key={c.platform + ":" + c.accountId + ":" + c.campaignId}>
                     <td>{c.accountName}</td>
+                    {showCombined && (
+                      <td>
+                        <span className="plat-dot" style={{ background: `var(${platMeta?.varName})` }} />
+                        {platMeta?.label ?? c.platform}
+                      </td>
+                    )}
                     <td>{c.campaignName}</td>
                     <td className="num">{fmtMoney(c.budget)}</td>
                     <td className="num">{fmtMoney(c.spend)}</td>
@@ -328,7 +393,7 @@ export default function MediosView() {
                     <td className="num">{c.ctr.toFixed(1)}%</td>
                     <td className="num">{fmtMoney(c.cpl)}</td>
                     <td className="num">{fmtInt(c.conversions)}</td>
-                    {platform === "google" && (
+                    {singlePlatform === "google" && (
                       <>
                         <td className="num">{fmtPct(c.searchImpressionShare)}</td>
                         <td className="num">{fmtScore10(c.qualityScore)}</td>
@@ -339,13 +404,13 @@ export default function MediosView() {
                         <td className="num">{fmtPct(c.optimizationScore)}</td>
                       </>
                     )}
-                    {(platform === "meta" || platform === "tiktok") && (
+                    {(singlePlatform === "meta" || singlePlatform === "tiktok") && (
                       <>
                         <td className="num">{fmtInt(c.reach ?? 0)}</td>
                         <td className="num">{fmtFreq(c.frequency)}</td>
                       </>
                     )}
-                    {platform === "tiktok" && (
+                    {singlePlatform === "tiktok" && (
                       <>
                         <td className="num">{fmtSeconds(c.avgVideoPlaySeconds)}</td>
                         <td className="num">{fmtInt(c.likes ?? 0)}</td>
@@ -361,7 +426,7 @@ export default function MediosView() {
       </div>
 
       <footer className="foot">
-        <span>Fuente de datos: {data.source === "windsor" ? "Windsor.ai (en vivo)" : "mock"}</span>
+        <span>Fuente de datos: {allMock ? "mock" : "Windsor.ai (en vivo)"}</span>
         <span>Perfil Medios — v1, arranca con Google Ads</span>
       </footer>
     </div>
