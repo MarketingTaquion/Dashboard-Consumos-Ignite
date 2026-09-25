@@ -39,6 +39,8 @@ Campos comunes a las 3 plataformas: `accountId/Name`, `campaignId/Name`, `impres
 - **Meta Ads y TikTok Ads**: `reach`, `frequency`.
 - **TikTok Ads** además: `avgVideoPlaySeconds`, `likes`.
 
+En la vista (`MediosView.tsx`), el selector de plataformas es **multi-selección** (a diferencia de Anuncios, que sigue siendo selección única): con una sola plataforma activa se ve igual que antes, con sus columnas específicas; con varias activas, la tabla las combina en una sola vista — agrega una columna "Plataforma" y oculta las columnas específicas de cada una (no tiene sentido mezclar cuota de subasta de Google con alcance de Meta en la misma fila). El filtro "Solo con actividad" (`spend > 0`, activado por defecto) y el selector de cuentas de la barra lateral se aplican sobre ese mismo conjunto ya combinado.
+
 ## `GET /api/ads` — nivel anuncio
 
 Mismos query params que `/api/campaigns`. `CONNECTED_PLATFORMS` en [`app/api/ads/route.ts`](../../app/api/ads/route.ts): hoy **Google Ads, Meta Ads y TikTok Ads** (LinkedIn cae a mock con warning). Mismo patrón de 2 capas (núcleo + descubrimiento, ventana derivada del período elegido) que a nivel campaña, un archivo por plataforma. Cada layer tiene un timeout explícito de 8s (`LAYER_TIMEOUT_MS`) — verificado en vivo que sin esto una consulta lenta puede colgar la request entera en vez de degradar con un warning.
@@ -53,7 +55,7 @@ Mismos query params que `/api/campaigns`. `CONNECTED_PLATFORMS` en [`app/api/ads
 
 Tipo `AdRow` (igual para las 3 plataformas, sin campos exclusivos): `accountId/Name`, `campaignId/Name`, `adId/Name`, `impressions`, `clicks`, `cpm`, `ctr`, `cpl`, `conversions`. `spend` se acumula internamente en cada fetcher (para `cpm`/`cpl`) pero no se expone en `AdRow` — no hace falta a nivel anuncio. Sin cuota de subasta/calidad (Google) ni rankings/% video visto (Meta) — quedaron fuera de esta primera versión de Anuncios a propósito, ver la nota arriba y el comentario al principio de `windsorAdsMeta.ts`.
 
-En la vista (`AnunciosView.tsx`), los anuncios se agrupan por campaña (para comparar variantes creativas de un mismo test) y se pueden ordenar dentro de cada grupo por CPL/CTR/impresiones — el orden entre grupos no cambia.
+En la vista (`AnunciosView.tsx`), los anuncios se agrupan por campaña (para comparar variantes creativas de un mismo test) y se pueden ordenar dentro de cada grupo por CPL/CTR/impresiones — el orden entre grupos no cambia. El filtro "Solo con actividad" (`impressions > 0`, activado por defecto — ver la nota de `AdRow` arriba, no hay `spend` a este nivel) y el selector de cuentas de la barra lateral también aplican acá, con el mismo patrón que Campañas.
 
 ## `GET /api/platform-comparison` — agregado por plataforma
 

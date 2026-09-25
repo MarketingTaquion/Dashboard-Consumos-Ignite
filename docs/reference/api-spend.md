@@ -57,6 +57,12 @@ Desglose por campaña de la vista Finanzas (a pedido explícito: "todas las camp
 | `label` | `string?` | Por defecto se asume "CPL"; usar `"CPME"` para clientes de comunidad (costo por miembro efectivo, no por lead) |
 | `prevPeriodDeltaPct` | `number?` | % de cambio del pacing vs. el período anterior. Ilustrativo — no hay histórico real conectado todavía (ver [estado y limitaciones](../explanation/estado-y-limitaciones.md)). |
 
+### Filtro "Solo con actividad" y desglose por campaña (`Dashboard.tsx`)
+
+El filtro "Solo con actividad" (`spend8 > 0`, activado por defecto) oculta cuentas sin gasto real en el período elegido — mismo criterio y misma barra lateral que en Medios/Ignite, acá a nivel cliente. Se aplica también a las campañas anidadas: si `c.campaigns` trae filas en `$0`, no se muestran al filtro estar activado, aunque la cuenta sí tenga actividad.
+
+El desglose por campaña (`c.campaigns`, cuando existe) se muestra **siempre**, sin un botón de expandir — no hay estado de "colapsado" por fila.
+
 ### `HealthIssue`
 
 | Campo | Tipo | Descripción |

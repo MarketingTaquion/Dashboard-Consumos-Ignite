@@ -77,10 +77,13 @@ No son variables CSS pero son el vocabulario visual del proyecto — reusalos en
 
 | Clase | Para qué |
 |---|---|
-| `.chip` / `.chip.plat` / `.chip[aria-pressed="true"]` | Botones tipo pill (filtros, dropdown de fecha) |
+| `.chip` / `.chip.plat` / `.chip[aria-pressed="true"]` | Botones tipo pill (filtros, dropdown de fecha, selector de orden en Anuncios) |
 | `.pill.good` / `.pill.warning` / `.pill.critical` | Badges de estado con dot + texto |
 | `.stat-chip` | Chip no interactivo para mostrar un total (Total Presupuesto, Total Gastado) |
-| `.toggle-track` / `.toggle-knob` | Switch visual (aunque el control real de comparación hoy usa un `<input type="checkbox">` dentro del dropdown de fecha) |
+| `.toggle-chip` (con `.toggle-track` / `.toggle-knob` adentro) | Switch real de un filtro on/off — usado por "Solo con actividad" en Finanzas, Campañas y Anuncios (`aria-pressed` en el botón controla el estado del knob vía CSS) |
+| `.op-layout` / `.sidebar` / `.client-list` / `.client-row` | Layout de 2 columnas con barra lateral de selección (clientes en Finanzas, cuentas en Campañas/Anuncios) — colapsa a una columna en pantallas angostas |
 | `.card` | Contenedor base (fondo, borde, radio — sin sombra) |
 | `.tq-arrow` | Flecha `↘` de categoría/estado, reemplazo de emoji |
 | `table.datatable` / `table.dense` | Tablas — `.dense` agrega cursor de orden en headers `.sortable` y zebra striping |
+| `tr.campaign-subrow` | Fila anidada de desglose por campaña, debajo de una cuenta (Finanzas) — siempre visible, sin botón de expandir |
+| `.ad-grid` / `.ad-card` / `.ad-campaign-group` | Grilla de tarjetas de Anuncios, agrupadas por campaña |

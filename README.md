@@ -26,10 +26,10 @@ Abrí `http://localhost:3000` — funciona con datos de ejemplo sin ninguna vari
 
 ## Qué falta (backlog conocido)
 
-- Terminar de conectar Google Ads en Windsor.ai (login de Google pendiente del lado del usuario) y confirmar salud de TikTok Ads.
-- Reemplazar `lib/googleAds.ts` (integración directa a Google Ads API) por una integración a la API REST de Windsor.ai.
-- Crear proyecto Supabase (Free) y migrar el almacenamiento de "mock + intento en vivo" a "leer de Supabase".
-- Mapeo real cliente↔cuenta — ver [estado y limitaciones](./docs/explanation/estado-y-limitaciones.md#todos-los-clientes-del-dashboard-son-ficticios).
-- Persistencia/histórico real por día (hoy se estima con un patrón semanal genérico).
+- **Google Ads + Meta Ads + TikTok Ads ya están conectados en vivo vía Windsor.ai** (Finanzas y las 3 vistas de Medios/Ignite) — lo que sigue pendiente es LinkedIn Ads, bloqueado por el plan Basic de Windsor (3 fuentes simultáneas, ya ocupadas — ver [estado y limitaciones](./docs/explanation/estado-y-limitaciones.md#por-qué-linkedin-ads-sigue-siendo-mock)).
+- Crear proyecto Supabase (Free) y migrar el almacenamiento de "mock + intento en vivo" a "leer de Supabase" (histórico real).
+- Mapeo real cliente↔cuenta — hoy las cuentas reales aparecen por su nombre en la plataforma publicitaria, no por cliente interno de Taquión — ver [estado y limitaciones](./docs/explanation/estado-y-limitaciones.md#todos-los-clientes-del-dashboard-son-ficticios).
+- Persistencia/histórico real por día en Finanzas (el gráfico de "Ritmo de consumo" hoy se estima con un patrón semanal genérico sobre el acumulado real).
+- Rango de fecha "Personalizado" — todavía no está conectado en ninguna de las 4 vistas, cae a "Este mes".
 - Autenticación de acceso al dashboard (Supabase Auth — fase 2, no bloquea el trabajo actual).
 - Tests automatizados — no hay ninguno todavía.
