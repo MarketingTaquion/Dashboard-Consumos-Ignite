@@ -37,6 +37,10 @@ export default function AnunciosView() {
   const [customTo, setCustomTo] = useState("");
   const [data, setData] = useState<AdsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Selector de cuentas en la barra lateral — mismo patrón que "Clientes" en
+  // Finanzas (Dashboard.tsx) y que el de Campañas (MediosView.tsx), acá a
+  // nivel cuenta a partir de los anuncios cargados.
+  const [accountKey, setAccountKey] = useState<string>("all");
   const dateMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -49,6 +53,12 @@ export default function AnunciosView() {
     document.addEventListener("mousedown", onClickOutside);
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, [dateMenuOpen]);
+
+  // Qué cuentas existen depende de la plataforma y el rango elegidos — si
+  // cambia cualquiera de los dos, la cuenta elegida puede dejar de existir.
+  useEffect(() => {
+    setAccountKey("all");
+  }, [platform, datePreset]);
 
   useEffect(() => {
     setData(null);
@@ -102,6 +112,15 @@ export default function AnunciosView() {
 
   const activeLabel = PLATFORMS.find((p) => p.key === platform)?.label ?? platform;
   const dateLabel = DATE_PRESETS.find((d) => d.key === datePreset)?.label ?? "Este mes";
+
+  // Cuentas para el sidebar, a partir de los anuncios cargados (sin
+  // duplicar por anuncio).
+  const accountMap = new Map<string, string>();
+  data.ads.forEach((ad) => {
+    if (!accountMap.has(ad.accountId)) accountMap.set(ad.accountId, ad.accountName);
+  });
+  const accounts = [...accountMap.entries()].map(([accountId, accountName]) => ({ accountId, accountName }));
+  const visibleAds = accountKey === "all" ? data.ads : data.ads.filter((ad) => ad.accountId === accountKey);
 
   return (
     <div className="wrap">
@@ -201,41 +220,64 @@ export default function AnunciosView() {
         </div>
       </div>
 
-      <div className="card">
-        <h2>Anuncios — {activeLabel}</h2>
-        <div className="card-sub">Un nivel más de detalle que la tabla de campañas — mismas métricas, ahora por pieza individual.</div>
-
-        {data.ads.length === 0 ? (
-          <div style={{ color: "var(--text-muted)", marginTop: 14 }}>Sin anuncios para mostrar.</div>
-        ) : (
-          <div className="ad-grid">
-            {data.ads.map((ad) => (
-              <div className="ad-card" key={ad.accountId + ":" + ad.campaignId + ":" + ad.adId}>
-                <div
-                  className="ad-thumb"
-                  style={
-                    platform !== "google"
-                      ? { background: `linear-gradient(135deg, var(--plat-${platform}), color-mix(in srgb, var(--plat-${platform}) 55%, #000))` }
-                      : undefined
-                  }
-                >
-                  {activeLabel}
-                </div>
-                <div className="ad-body">
-                  <div className="ad-name" title={ad.adName}>{ad.adName}</div>
-                  <div className="ad-meta">
-                    <span title={ad.accountName}>{ad.accountName}</span>
-                    <span className="ad-meta-campaign" title={ad.campaignName}>{ad.campaignName}</span>
-                  </div>
-                  <div className="ad-metric-row"><span>Impresiones</span><span className="num">{fmtInt(ad.impressions)}</span></div>
-                  <div className="ad-metric-row"><span>CTR</span><span className="num">{ad.ctr.toFixed(1)}%</span></div>
-                  <div className="ad-metric-row"><span>CPL</span><span className="num">{fmtMoney(ad.cpl)}</span></div>
-                  <div className="ad-metric-row"><span>Conversiones</span><span className="num">{fmtInt(ad.conversions)}</span></div>
-                </div>
-              </div>
+      <div className="op-layout">
+        <div className="card sidebar">
+          <div className="eyebrow">Cuentas</div>
+          <div className="client-list">
+            <button className="client-row" aria-pressed={accountKey === "all"} onClick={() => setAccountKey("all")}>
+              Todas las cuentas
+            </button>
+            {accounts.map((a) => (
+              <button key={a.accountId} className="client-row" aria-pressed={accountKey === a.accountId} onClick={() => setAccountKey(a.accountId)}>
+                {a.accountName}
+              </button>
             ))}
+            {accounts.length === 0 && (
+              <div style={{ color: "var(--text-muted)", fontSize: 12.5, padding: "8px 10px" }}>Sin cuentas para mostrar.</div>
+            )}
           </div>
-        )}
+        </div>
+
+        <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="card">
+          <h2>Anuncios — {activeLabel}</h2>
+          <div className="card-sub">Un nivel más de detalle que la tabla de campañas — mismas métricas, ahora por pieza individual.</div>
+  
+          {visibleAds.length === 0 ? (
+            <div style={{ color: "var(--text-muted)", marginTop: 14 }}>
+              {data.ads.length === 0 ? "Sin anuncios para mostrar." : "Sin anuncios para esta cuenta."}
+            </div>
+          ) : (
+            <div className="ad-grid">
+              {visibleAds.map((ad) => (
+                <div className="ad-card" key={ad.accountId + ":" + ad.campaignId + ":" + ad.adId}>
+                  <div
+                    className="ad-thumb"
+                    style={
+                      platform !== "google"
+                        ? { background: `linear-gradient(135deg, var(--plat-${platform}), color-mix(in srgb, var(--plat-${platform}) 55%, #000))` }
+                        : undefined
+                    }
+                  >
+                    {activeLabel}
+                  </div>
+                  <div className="ad-body">
+                    <div className="ad-name" title={ad.adName}>{ad.adName}</div>
+                    <div className="ad-meta">
+                      <span title={ad.accountName}>{ad.accountName}</span>
+                      <span className="ad-meta-campaign" title={ad.campaignName}>{ad.campaignName}</span>
+                    </div>
+                    <div className="ad-metric-row"><span>Impresiones</span><span className="num">{fmtInt(ad.impressions)}</span></div>
+                    <div className="ad-metric-row"><span>CTR</span><span className="num">{ad.ctr.toFixed(1)}%</span></div>
+                    <div className="ad-metric-row"><span>CPL</span><span className="num">{fmtMoney(ad.cpl)}</span></div>
+                    <div className="ad-metric-row"><span>Conversiones</span><span className="num">{fmtInt(ad.conversions)}</span></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        </div>
       </div>
 
       <footer className="foot">

@@ -104,6 +104,11 @@ export default function MediosView() {
   // Activado por defecto (a pedido explícito 2026-09-24), en los 2
   // usuarios por igual.
   const [onlyActive, setOnlyActive] = useState(true);
+  // Selector de cuentas en la barra lateral — mismo patrón que "Clientes" en
+  // Finanzas (Dashboard.tsx), acá a nivel cuenta (que es el nivel real que
+  // maneja Medios: CampaignRow no agrupa varias plataformas bajo un mismo
+  // "cliente", cada cuenta de Windsor es de una sola plataforma).
+  const [accountKey, setAccountKey] = useState<string>("all");
   const dateMenuRef = useRef<HTMLDivElement>(null);
 
   const enabledKeys = PLATFORMS.filter((p) => platformsEnabled[p.key]).map((p) => p.key);
@@ -147,6 +152,12 @@ export default function MediosView() {
       .catch((err) => setError(String(err?.message || err)));
   }, [enabledKeysDep, datePreset]);
 
+  // Qué cuentas existen depende de las plataformas activas y el rango — si
+  // cambia cualquiera de los dos, la cuenta elegida puede dejar de existir.
+  useEffect(() => {
+    setAccountKey("all");
+  }, [enabledKeysDep, datePreset]);
+
   function togglePlatform(key: PlatformKey) {
     // No se puede apagar la última plataforma activa — siempre tiene que
     // quedar al menos una, si no la tabla queda sin sentido.
@@ -187,14 +198,25 @@ export default function MediosView() {
   const daysInPeriod = dataByPlatform[enabledKeys[0]]?.daysInPeriod ?? 0;
 
   // "Actividad" = gasto real > 0 — no "tiene presupuesto cargado" (mismo
-  // criterio que Finanzas). Alimenta tanto la tabla como los totales de abajo.
+  // criterio que Finanzas). Alimenta el sidebar de cuentas y la tabla.
   const visibleCampaigns = onlyActive ? allCampaigns.filter((c) => c.spend > 0) : allCampaigns;
 
+  // Cuentas para el sidebar — a partir de las campañas ya filtradas por
+  // "Solo con actividad" (mismo orden que Finanzas: primero actividad,
+  // después la cuenta elegida), sin duplicar por campaña.
+  const accountMap = new Map<string, string>();
+  visibleCampaigns.forEach((c) => {
+    if (!accountMap.has(c.accountId)) accountMap.set(c.accountId, c.accountName);
+  });
+  const accounts = [...accountMap.entries()].map(([accountId, accountName]) => ({ accountId, accountName }));
+
+  const campaignsIncluded = accountKey === "all" ? visibleCampaigns : visibleCampaigns.filter((c) => c.accountId === accountKey);
+
   // Totales — suma de las campañas que se están mostrando (plataformas +
-  // período + filtro de actividad elegidos), mismo par "Total presupuesto"/
-  // "Total gastado" que ya tiene Finanzas arriba de su tabla.
-  const totalBudget = visibleCampaigns.reduce((sum, c) => sum + c.budget, 0);
-  const totalSpend = visibleCampaigns.reduce((sum, c) => sum + c.spend, 0);
+  // período + filtro de actividad + cuenta elegidos), mismo par "Total
+  // presupuesto"/"Total gastado" que ya tiene Finanzas arriba de su tabla.
+  const totalBudget = campaignsIncluded.reduce((sum, c) => sum + c.budget, 0);
+  const totalSpend = campaignsIncluded.reduce((sum, c) => sum + c.spend, 0);
 
   return (
     <div className="wrap">
@@ -308,120 +330,141 @@ export default function MediosView() {
         </div>
       </div>
 
-      <div className="card">
-        <h2>Campañas — {activeLabel}</h2>
-        <div className="card-sub">
-          {showCombined &&
-            "Métricas comunes a las plataformas seleccionadas. Para cuota de subasta/calidad, alcance o video, elegí una sola plataforma a la vez."}
-          {singlePlatform === "google" && "Métricas comunes + cuota de subasta y calidad, propias de Google Ads."}
-          {singlePlatform === "meta" && "Métricas comunes + alcance y frecuencia, propias de campañas de alcance/awareness."}
-          {singlePlatform === "tiktok" && "Métricas comunes + alcance, frecuencia y video — el formato nativo de la plataforma."}
+      <div className="op-layout">
+        <div className="card sidebar">
+          <div className="eyebrow">Cuentas</div>
+          <div className="client-list">
+            <button className="client-row" aria-pressed={accountKey === "all"} onClick={() => setAccountKey("all")}>
+              Todas las cuentas
+            </button>
+            {accounts.map((a) => (
+              <button key={a.accountId} className="client-row" aria-pressed={accountKey === a.accountId} onClick={() => setAccountKey(a.accountId)}>
+                {a.accountName}
+              </button>
+            ))}
+            {accounts.length === 0 && (
+              <div style={{ color: "var(--text-muted)", fontSize: 12.5, padding: "8px 10px" }}>Sin cuentas con actividad.</div>
+            )}
+          </div>
         </div>
-        <div className="table-scroll-x" style={{ marginTop: 14 }}>
-          <table className="dense">
-            <thead>
-              <tr>
-                <th>Cuenta</th>
-                {showCombined && <th>Plataforma</th>}
-                <th>Campaña</th>
-                <th className="num">Presupuesto proyectado</th>
-                <th className="num">Real</th>
-                <th className="num">Presup. diario recom.</th>
-                <th className="num">Impr.</th>
-                <th className="num">Clicks</th>
-                <th className="num">CPM</th>
-                <th className="num">CTR</th>
-                <th className="num">CPL</th>
-                <th className="num">Conv.</th>
-                {singlePlatform === "google" && (
-                  <>
-                    <th className="num">Cuota impr.</th>
-                    <th className="num">Nivel calidad</th>
-                    <th className="num">Pérd. presup.</th>
-                    <th className="num">Pérd. ranking</th>
-                    <th className="num">Pos. abs.</th>
-                    <th className="num">Pos. superior</th>
-                    <th className="num">Punt. optim.</th>
-                  </>
-                )}
-                {(singlePlatform === "meta" || singlePlatform === "tiktok") && (
-                  <>
-                    <th className="num">Alcance</th>
-                    <th className="num">Frec.</th>
-                  </>
-                )}
-                {singlePlatform === "tiktok" && (
-                  <>
-                    <th className="num">Tiempo prom.</th>
-                    <th className="num">Likes</th>
-                  </>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {visibleCampaigns.length === 0 ? (
+
+        <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="card">
+          <h2>Campañas — {activeLabel}</h2>
+          <div className="card-sub">
+            {showCombined &&
+              "Métricas comunes a las plataformas seleccionadas. Para cuota de subasta/calidad, alcance o video, elegí una sola plataforma a la vez."}
+            {singlePlatform === "google" && "Métricas comunes + cuota de subasta y calidad, propias de Google Ads."}
+            {singlePlatform === "meta" && "Métricas comunes + alcance y frecuencia, propias de campañas de alcance/awareness."}
+            {singlePlatform === "tiktok" && "Métricas comunes + alcance, frecuencia y video — el formato nativo de la plataforma."}
+          </div>
+          <div className="table-scroll-x" style={{ marginTop: 14 }}>
+            <table className="dense">
+              <thead>
                 <tr>
-                  <td
-                    colSpan={11 + (showCombined ? 1 : extraColCount(singlePlatform!))}
-                    style={{ color: "var(--text-muted)" }}
-                  >
-                    {onlyActive && allCampaigns.length > 0 ? "Sin campañas con actividad para mostrar." : "Sin campañas para mostrar."}
-                  </td>
+                  <th>Cuenta</th>
+                  {showCombined && <th>Plataforma</th>}
+                  <th>Campaña</th>
+                  <th className="num">Presupuesto proyectado</th>
+                  <th className="num">Real</th>
+                  <th className="num">Presup. diario recom.</th>
+                  <th className="num">Impr.</th>
+                  <th className="num">Clicks</th>
+                  <th className="num">CPM</th>
+                  <th className="num">CTR</th>
+                  <th className="num">CPL</th>
+                  <th className="num">Conv.</th>
+                  {singlePlatform === "google" && (
+                    <>
+                      <th className="num">Cuota impr.</th>
+                      <th className="num">Nivel calidad</th>
+                      <th className="num">Pérd. presup.</th>
+                      <th className="num">Pérd. ranking</th>
+                      <th className="num">Pos. abs.</th>
+                      <th className="num">Pos. superior</th>
+                      <th className="num">Punt. optim.</th>
+                    </>
+                  )}
+                  {(singlePlatform === "meta" || singlePlatform === "tiktok") && (
+                    <>
+                      <th className="num">Alcance</th>
+                      <th className="num">Frec.</th>
+                    </>
+                  )}
+                  {singlePlatform === "tiktok" && (
+                    <>
+                      <th className="num">Tiempo prom.</th>
+                      <th className="num">Likes</th>
+                    </>
+                  )}
                 </tr>
-              ) : (
-                visibleCampaigns.map((c) => {
-                  const daily = dailyRecommended(c.budget, c.spend, today, daysInPeriod);
-                  const platMeta = PLATFORMS.find((p) => p.key === c.platform);
-                  return (
-                  <tr key={c.platform + ":" + c.accountId + ":" + c.campaignId}>
-                    <td>{c.accountName}</td>
-                    {showCombined && (
-                      <td>
-                        <span className="plat-dot" style={{ background: `var(${platMeta?.varName})` }} />
-                        {platMeta?.label ?? c.platform}
-                      </td>
-                    )}
-                    <td>{c.campaignName}</td>
-                    <td className="num">{fmtMoney(c.budget)}</td>
-                    <td className="num">{fmtMoney(c.spend)}</td>
-                    <td className="num" style={daily === undefined ? undefined : { color: daily < 0 ? "var(--delta-bad-text)" : "var(--delta-good-text)" }}>
-                      {daily === undefined ? "—" : fmtDailySigned(daily)}
+              </thead>
+              <tbody>
+                {campaignsIncluded.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={11 + (showCombined ? 1 : extraColCount(singlePlatform!))}
+                      style={{ color: "var(--text-muted)" }}
+                    >
+                      {allCampaigns.length === 0 ? "Sin campañas para mostrar." : "Sin campañas con los filtros elegidos."}
                     </td>
-                    <td className="num">{fmtInt(c.impressions)}</td>
-                    <td className="num">{fmtInt(c.clicks)}</td>
-                    <td className="num">{fmtMoney(c.cpm)}</td>
-                    <td className="num">{c.ctr.toFixed(1)}%</td>
-                    <td className="num">{fmtMoney(c.cpl)}</td>
-                    <td className="num">{fmtInt(c.conversions)}</td>
-                    {singlePlatform === "google" && (
-                      <>
-                        <td className="num">{fmtPct(c.searchImpressionShare)}</td>
-                        <td className="num">{fmtScore10(c.qualityScore)}</td>
-                        <td className="num">{fmtPct(c.searchBudgetLostIS)}</td>
-                        <td className="num">{fmtPct(c.searchRankLostIS)}</td>
-                        <td className="num">{fmtPct(c.searchAbsoluteTopIS)}</td>
-                        <td className="num">{fmtPct(c.searchTopIS)}</td>
-                        <td className="num">{fmtPct(c.optimizationScore)}</td>
-                      </>
-                    )}
-                    {(singlePlatform === "meta" || singlePlatform === "tiktok") && (
-                      <>
-                        <td className="num">{fmtInt(c.reach ?? 0)}</td>
-                        <td className="num">{fmtFreq(c.frequency)}</td>
-                      </>
-                    )}
-                    {singlePlatform === "tiktok" && (
-                      <>
-                        <td className="num">{fmtSeconds(c.avgVideoPlaySeconds)}</td>
-                        <td className="num">{fmtInt(c.likes ?? 0)}</td>
-                      </>
-                    )}
                   </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  campaignsIncluded.map((c) => {
+                    const daily = dailyRecommended(c.budget, c.spend, today, daysInPeriod);
+                    const platMeta = PLATFORMS.find((p) => p.key === c.platform);
+                    return (
+                    <tr key={c.platform + ":" + c.accountId + ":" + c.campaignId}>
+                      <td>{c.accountName}</td>
+                      {showCombined && (
+                        <td>
+                          <span className="plat-dot" style={{ background: `var(${platMeta?.varName})` }} />
+                          {platMeta?.label ?? c.platform}
+                        </td>
+                      )}
+                      <td>{c.campaignName}</td>
+                      <td className="num">{fmtMoney(c.budget)}</td>
+                      <td className="num">{fmtMoney(c.spend)}</td>
+                      <td className="num" style={daily === undefined ? undefined : { color: daily < 0 ? "var(--delta-bad-text)" : "var(--delta-good-text)" }}>
+                        {daily === undefined ? "—" : fmtDailySigned(daily)}
+                      </td>
+                      <td className="num">{fmtInt(c.impressions)}</td>
+                      <td className="num">{fmtInt(c.clicks)}</td>
+                      <td className="num">{fmtMoney(c.cpm)}</td>
+                      <td className="num">{c.ctr.toFixed(1)}%</td>
+                      <td className="num">{fmtMoney(c.cpl)}</td>
+                      <td className="num">{fmtInt(c.conversions)}</td>
+                      {singlePlatform === "google" && (
+                        <>
+                          <td className="num">{fmtPct(c.searchImpressionShare)}</td>
+                          <td className="num">{fmtScore10(c.qualityScore)}</td>
+                          <td className="num">{fmtPct(c.searchBudgetLostIS)}</td>
+                          <td className="num">{fmtPct(c.searchRankLostIS)}</td>
+                          <td className="num">{fmtPct(c.searchAbsoluteTopIS)}</td>
+                          <td className="num">{fmtPct(c.searchTopIS)}</td>
+                          <td className="num">{fmtPct(c.optimizationScore)}</td>
+                        </>
+                      )}
+                      {(singlePlatform === "meta" || singlePlatform === "tiktok") && (
+                        <>
+                          <td className="num">{fmtInt(c.reach ?? 0)}</td>
+                          <td className="num">{fmtFreq(c.frequency)}</td>
+                        </>
+                      )}
+                      {singlePlatform === "tiktok" && (
+                        <>
+                          <td className="num">{fmtSeconds(c.avgVideoPlaySeconds)}</td>
+                          <td className="num">{fmtInt(c.likes ?? 0)}</td>
+                        </>
+                      )}
+                    </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
         </div>
       </div>
 
