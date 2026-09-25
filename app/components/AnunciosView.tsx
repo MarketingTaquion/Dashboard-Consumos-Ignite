@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { AdsResponse, PlatformKey } from "@/lib/types";
+import type { AdRow, AdsResponse, PlatformKey } from "@/lib/types";
 
 const PLATFORMS: { key: PlatformKey; label: string; varName: string }[] = [
   { key: "google", label: "Google Ads", varName: "--plat-google" },
@@ -29,6 +29,57 @@ function fmtMoney(n: number): string {
   return "$" + Math.round(n).toLocaleString("es-AR");
 }
 
+// Orden de rendimiento DENTRO de cada grupo de campaña (no reordena los
+// grupos entre sí) — a pedido explícito 2026-09-25, para ver de un vistazo
+// qué variante creativa escalar o pausar.
+type SortKey = "default" | "cpl" | "ctr" | "impressions";
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: "default", label: "Orden original" },
+  { key: "cpl", label: "Mejor CPL" },
+  { key: "ctr", label: "Mejor CTR" },
+  { key: "impressions", label: "Más impresiones" },
+];
+
+function sortAdsBy(ads: AdRow[], sortKey: SortKey): AdRow[] {
+  if (sortKey === "default") return ads;
+  const arr = [...ads];
+  if (sortKey === "cpl") {
+    // Sin conversiones, cpl viene en 0 — no es "el mejor CPL", es "no hay
+    // dato". Se los manda al final en vez de mezclarlos arriba.
+    arr.sort((a, b) => (a.conversions > 0 ? a.cpl : Infinity) - (b.conversions > 0 ? b.cpl : Infinity));
+  } else if (sortKey === "ctr") {
+    arr.sort((a, b) => b.ctr - a.ctr);
+  } else if (sortKey === "impressions") {
+    arr.sort((a, b) => b.impressions - a.impressions);
+  }
+  return arr;
+}
+
+// Un anuncio pertenece a una sola cuenta + campaña — se agrupan así para
+// comparar de un vistazo las variantes creativas de un mismo test
+// (a pedido explícito 2026-09-25), en vez de una grilla plana.
+interface CampaignGroup {
+  key: string;
+  campaignName: string;
+  accountName: string;
+  ads: AdRow[];
+}
+function groupByCampaign(ads: AdRow[]): CampaignGroup[] {
+  const groups: CampaignGroup[] = [];
+  const indexByKey = new Map<string, number>();
+  ads.forEach((ad) => {
+    const key = ad.accountId + ":" + ad.campaignId;
+    let idx = indexByKey.get(key);
+    if (idx === undefined) {
+      idx = groups.length;
+      indexByKey.set(key, idx);
+      groups.push({ key, campaignName: ad.campaignName, accountName: ad.accountName, ads: [] });
+    }
+    groups[idx].ads.push(ad);
+  });
+  return groups;
+}
+
 export default function AnunciosView() {
   const [platform, setPlatform] = useState<PlatformKey>("google");
   const [datePreset, setDatePreset] = useState<DatePreset>("month");
@@ -49,6 +100,7 @@ export default function AnunciosView() {
   // Finanzas (Dashboard.tsx) y que el de Campañas (MediosView.tsx), acá a
   // nivel cuenta a partir de los anuncios cargados.
   const [accountKey, setAccountKey] = useState<string>("all");
+  const [sortKey, setSortKey] = useState<SortKey>("default");
   const dateMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -133,6 +185,7 @@ export default function AnunciosView() {
   });
   const accounts = [...accountMap.entries()].map(([accountId, accountName]) => ({ accountId, accountName }));
   const visibleAds = accountKey === "all" ? activeAds : activeAds.filter((ad) => ad.accountId === accountKey);
+  const campaignGroups = groupByCampaign(visibleAds);
 
   return (
     <div className="wrap">
@@ -227,6 +280,13 @@ export default function AnunciosView() {
             </span>
             Solo con actividad
           </button>
+          <div className="chip-row" role="group" aria-label="Ordenar anuncios dentro de cada campaña">
+            {SORT_OPTIONS.map((o) => (
+              <button key={o.key} className="chip" aria-pressed={sortKey === o.key} onClick={() => setSortKey(o.key)}>
+                {o.label}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="chip-row">
           {PLATFORMS.map((p) => (
@@ -266,33 +326,39 @@ export default function AnunciosView() {
               {data.ads.length === 0 ? "Sin anuncios para mostrar." : "Sin anuncios con los filtros elegidos."}
             </div>
           ) : (
-            <div className="ad-grid">
-              {visibleAds.map((ad) => (
-                <div className="ad-card" key={ad.accountId + ":" + ad.campaignId + ":" + ad.adId}>
-                  <div
-                    className="ad-thumb"
-                    style={
-                      platform !== "google"
-                        ? { background: `linear-gradient(135deg, var(--plat-${platform}), color-mix(in srgb, var(--plat-${platform}) 55%, #000))` }
-                        : undefined
-                    }
-                  >
-                    {activeLabel}
-                  </div>
-                  <div className="ad-body">
-                    <div className="ad-name" title={ad.adName}>{ad.adName}</div>
-                    <div className="ad-meta">
-                      <span title={ad.accountName}>{ad.accountName}</span>
-                      <span className="ad-meta-campaign" title={ad.campaignName}>{ad.campaignName}</span>
+            campaignGroups.map((g) => (
+              <div className="ad-campaign-group" key={g.key}>
+                <h3 className="ad-campaign-heading">
+                  {g.campaignName}
+                  <span className="ad-campaign-account">{g.accountName}</span>
+                </h3>
+                <div className="ad-grid">
+                  {sortAdsBy(g.ads, sortKey).map((ad) => (
+                    <div className="ad-card" key={ad.adId}>
+                      <div
+                        className="ad-thumb"
+                        style={
+                          platform !== "google"
+                            ? { background: `linear-gradient(135deg, var(--plat-${platform}), color-mix(in srgb, var(--plat-${platform}) 55%, #000))` }
+                            : undefined
+                        }
+                      >
+                        {activeLabel}
+                      </div>
+                      <div className="ad-body">
+                        <div className="ad-name" title={ad.adName}>{ad.adName}</div>
+                        <div className="ad-metric-row"><span>Impresiones</span><span className="num">{fmtInt(ad.impressions)}</span></div>
+                        <div className="ad-metric-row"><span>Clicks</span><span className="num">{fmtInt(ad.clicks)}</span></div>
+                        <div className="ad-metric-row"><span>CPM</span><span className="num">{fmtMoney(ad.cpm)}</span></div>
+                        <div className="ad-metric-row"><span>CTR</span><span className="num">{ad.ctr.toFixed(1)}%</span></div>
+                        <div className="ad-metric-row"><span>CPL</span><span className="num">{fmtMoney(ad.cpl)}</span></div>
+                        <div className="ad-metric-row"><span>Conversiones</span><span className="num">{fmtInt(ad.conversions)}</span></div>
+                      </div>
                     </div>
-                    <div className="ad-metric-row"><span>Impresiones</span><span className="num">{fmtInt(ad.impressions)}</span></div>
-                    <div className="ad-metric-row"><span>CTR</span><span className="num">{ad.ctr.toFixed(1)}%</span></div>
-                    <div className="ad-metric-row"><span>CPL</span><span className="num">{fmtMoney(ad.cpl)}</span></div>
-                    <div className="ad-metric-row"><span>Conversiones</span><span className="num">{fmtInt(ad.conversions)}</span></div>
-                  </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            ))
           )}
         </div>
         </div>
