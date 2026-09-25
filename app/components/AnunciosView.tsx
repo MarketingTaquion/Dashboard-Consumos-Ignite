@@ -37,6 +37,14 @@ export default function AnunciosView() {
   const [customTo, setCustomTo] = useState("");
   const [data, setData] = useState<AdsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Mismo filtro "Solo con actividad" que ya tienen Finanzas y Campañas
+  // (MediosView.tsx), acá por anuncio. AdRow no trae "spend" (no se expone
+  // a nivel anuncio, ver lib/windsorAds.ts), así que el criterio de
+  // actividad es impressions > 0 — un anuncio recién descubierto por la
+  // capa de discovery (pausado/sin correr en el período) llega con
+  // impresiones en 0, igual que una campaña sin actividad llega con spend
+  // en 0. Activado por defecto, mismo criterio que el resto del dashboard.
+  const [onlyActive, setOnlyActive] = useState(true);
   // Selector de cuentas en la barra lateral — mismo patrón que "Clientes" en
   // Finanzas (Dashboard.tsx) y que el de Campañas (MediosView.tsx), acá a
   // nivel cuenta a partir de los anuncios cargados.
@@ -113,14 +121,18 @@ export default function AnunciosView() {
   const activeLabel = PLATFORMS.find((p) => p.key === platform)?.label ?? platform;
   const dateLabel = DATE_PRESETS.find((d) => d.key === datePreset)?.label ?? "Este mes";
 
-  // Cuentas para el sidebar, a partir de los anuncios cargados (sin
-  // duplicar por anuncio).
+  // "Actividad" = impresiones reales > 0 (ver nota de onlyActive más
+  // arriba). Alimenta el sidebar de cuentas y la grilla.
+  const activeAds = onlyActive ? data.ads.filter((ad) => ad.impressions > 0) : data.ads;
+
+  // Cuentas para el sidebar, a partir de los anuncios ya filtrados por
+  // actividad (sin duplicar por anuncio).
   const accountMap = new Map<string, string>();
-  data.ads.forEach((ad) => {
+  activeAds.forEach((ad) => {
     if (!accountMap.has(ad.accountId)) accountMap.set(ad.accountId, ad.accountName);
   });
   const accounts = [...accountMap.entries()].map(([accountId, accountName]) => ({ accountId, accountName }));
-  const visibleAds = accountKey === "all" ? data.ads : data.ads.filter((ad) => ad.accountId === accountKey);
+  const visibleAds = accountKey === "all" ? activeAds : activeAds.filter((ad) => ad.accountId === accountKey);
 
   return (
     <div className="wrap">
@@ -209,6 +221,12 @@ export default function AnunciosView() {
               </div>
             )}
           </div>
+          <button className="toggle-chip" aria-pressed={onlyActive} onClick={() => setOnlyActive((v) => !v)}>
+            <span className="toggle-track">
+              <span className="toggle-knob" />
+            </span>
+            Solo con actividad
+          </button>
         </div>
         <div className="chip-row">
           {PLATFORMS.map((p) => (
@@ -245,7 +263,7 @@ export default function AnunciosView() {
   
           {visibleAds.length === 0 ? (
             <div style={{ color: "var(--text-muted)", marginTop: 14 }}>
-              {data.ads.length === 0 ? "Sin anuncios para mostrar." : "Sin anuncios para esta cuenta."}
+              {data.ads.length === 0 ? "Sin anuncios para mostrar." : "Sin anuncios con los filtros elegidos."}
             </div>
           ) : (
             <div className="ad-grid">
