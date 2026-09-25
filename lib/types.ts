@@ -118,6 +118,8 @@ export interface AdRow {
   adId: string;
   adName: string;
   impressions: number;
+  clicks: number;
+  cpm: number; // spend / impressions * 1000; 0 si impressions es 0
   ctr: number; // %, 0-100
   cpl: number; // spend / conversions; 0 si conversions es 0
   conversions: number;

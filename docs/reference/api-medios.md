@@ -51,7 +51,9 @@ Mismos query params que `/api/campaigns`. `CONNECTED_PLATFORMS` en [`app/api/ads
 
 `ad_id`/`ad_name` verificados contra `windsor.ai/data-field/<connector>/` de cada uno antes de escribir los fetchers. Meta repite la misma trampa que a nivel campaña: el nombre de campaña ahí es `campaign`, no `campaign_name` (`windsorAdsMeta.ts` ya lo tiene en cuenta).
 
-Tipo `AdRow` (igual para las 3 plataformas, sin campos exclusivos): `accountId/Name`, `campaignId/Name`, `adId/Name`, `impressions`, `ctr`, `cpl`, `conversions`. Sin cuota de subasta/calidad (Google) ni rankings/% video visto (Meta) — quedaron fuera de esta primera versión de Anuncios a propósito, ver la nota arriba y el comentario al principio de `windsorAdsMeta.ts`.
+Tipo `AdRow` (igual para las 3 plataformas, sin campos exclusivos): `accountId/Name`, `campaignId/Name`, `adId/Name`, `impressions`, `clicks`, `cpm`, `ctr`, `cpl`, `conversions`. `spend` se acumula internamente en cada fetcher (para `cpm`/`cpl`) pero no se expone en `AdRow` — no hace falta a nivel anuncio. Sin cuota de subasta/calidad (Google) ni rankings/% video visto (Meta) — quedaron fuera de esta primera versión de Anuncios a propósito, ver la nota arriba y el comentario al principio de `windsorAdsMeta.ts`.
+
+En la vista (`AnunciosView.tsx`), los anuncios se agrupan por campaña (para comparar variantes creativas de un mismo test) y se pueden ordenar dentro de cada grupo por CPL/CTR/impresiones — el orden entre grupos no cambia.
 
 ## `GET /api/platform-comparison` — agregado por plataforma
 

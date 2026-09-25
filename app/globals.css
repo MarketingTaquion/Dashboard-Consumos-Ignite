@@ -314,10 +314,18 @@ footer.foot code { background: var(--surface-2); padding: 1px 5px; border-radius
   font-weight: 700; font-size: 13px; line-height: 1.35; margin-bottom: 6px;
   overflow-wrap: anywhere;
 }
-.ad-meta { font-size: 11px; color: var(--text-muted); margin-bottom: 8px; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
-.ad-meta .ad-meta-campaign { color: var(--text-secondary); }
 .ad-metric-row { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; border-top: 1px solid var(--border); }
 .ad-metric-row:first-of-type { border-top: none; }
+
+/* Anuncios agrupados por campaña — el nombre de cuenta/campaña vive acá
+   (antes se repetía en cada tarjeta vía .ad-meta), no por anuncio. */
+.ad-campaign-group { margin-top: 22px; }
+.ad-campaign-group:first-child { margin-top: 14px; }
+.ad-campaign-heading {
+  font-size: 14px; font-weight: 700; color: var(--text-primary);
+  display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; overflow-wrap: anywhere;
+}
+.ad-campaign-account { font-size: 12px; font-weight: 400; color: var(--text-muted); }
 .ad-metric-row span:first-child { color: var(--text-muted); }
 
 /* Vista Comparación — barras de CPL por plataforma */

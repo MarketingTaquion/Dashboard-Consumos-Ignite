@@ -168,6 +168,8 @@ export async function fetchMetaAds(rangeKey: DateRangeKey = "month"): Promise<{ 
       adId: acc.adId,
       adName: acc.adName,
       impressions: acc.impressions,
+      clicks: acc.clicks,
+      cpm: acc.impressions > 0 ? (acc.spend / acc.impressions) * 1000 : 0,
       ctr: acc.impressions > 0 ? (acc.clicks / acc.impressions) * 100 : 0,
       cpl: acc.conversions > 0 ? acc.spend / acc.conversions : 0,
       conversions: acc.conversions,
