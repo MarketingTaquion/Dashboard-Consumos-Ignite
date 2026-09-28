@@ -476,6 +476,7 @@ export default function AnunciosView() {
                               <div className="ad-name" title={ad.adName}>{ad.adName}</div>
                               <div className="ad-metric-row"><span>Impresiones</span><span className="num">{fmtInt(ad.impressions)}</span></div>
                               <div className="ad-metric-row"><span>Clicks</span><span className="num">{fmtInt(ad.clicks)}</span></div>
+                              <div className="ad-metric-row"><span>Gasto</span><span className="num">{fmtMoney(ad.spend)}</span></div>
                               <div className="ad-metric-row"><span>CPM</span><span className="num">{fmtMoney(ad.cpm)}</span></div>
                               <div className="ad-metric-row"><span>CTR</span><span className="num">{ad.ctr.toFixed(1)}%</span></div>
                               <div className="ad-metric-row"><span>CPL</span><span className="num">{fmtMoney(ad.cpl)}</span></div>
