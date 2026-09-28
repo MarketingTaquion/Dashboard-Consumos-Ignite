@@ -59,7 +59,13 @@ function getOrCreate(byCampaign: Map<string, Accum>, row: any): Accum | null {
       accountName: String(row.account_name ?? accountId),
       campaignId,
       // "campaign" es el nombre real del campo en el connector "facebook" — ver nota arriba.
-      campaignName: String(row.campaign ?? campaignId),
+      // .trim() — verificado en vivo 2026-09-28: el presupuesto por campaña
+      // (lib/financeCampaigns.ts, app/api/campaigns/route.ts) cruza esto
+      // contra el nombre de la hoja de proyectados, que sí viene recortado
+      // (lib/mediaPlan.ts) — un espacio invisible de más acá rompía el cruce
+      // en silencio (el total de cuenta daba bien porque no depende del
+      // nombre, pero cada campaña individual quedaba en $0).
+      campaignName: String(row.campaign ?? campaignId).trim(),
       impressions: 0,
       clicks: 0,
       spend: 0,
