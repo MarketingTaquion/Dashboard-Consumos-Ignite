@@ -57,7 +57,11 @@ function getOrCreate(byCampaign: Map<string, Accum>, row: any): Accum | null {
       accountId,
       accountName: String(row.account_name ?? accountId),
       campaignId,
-      campaignName: String(row.campaign_name ?? campaignId),
+      // .trim() — ver la nota en lib/windsorMeta.ts: el cruce con el
+      // presupuesto por campaña de la hoja de proyectados necesita el mismo
+      // texto exacto que ahí (que sí viene recortado), un espacio de más
+      // acá rompe ese cruce en silencio.
+      campaignName: String(row.campaign_name ?? campaignId).trim(),
       impressions: 0,
       clicks: 0,
       spend: 0,
