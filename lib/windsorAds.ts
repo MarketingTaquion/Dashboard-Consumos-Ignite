@@ -34,8 +34,9 @@ import { resolveDateRange, discoveryWindowFor, type DateRangeKey } from "./winds
  * fetchVideoLayer más abajo), igual que las métricas de cuota de
  * subasta/calidad en lib/windsorCampaigns.ts. Un mismo ad_id puede traer
  * varios video_id (Demand Gen rota varios videos bajo un mismo anuncio) —
- * se usa el primero que llega, no se promedian ni se eligen por criterio
- * alguno.
+ * se usa el primero que llega para la miniatura/preview, pero se cuentan
+ * todos en `videoVariantCount` para que la UI avise "+N variantes" en vez
+ * de mostrar un solo video en silencio como si fuera el único.
  *
  * SOLO SERVER-SIDE.
  */
@@ -67,6 +68,8 @@ interface Accum {
   spend: number;
   conversions: number;
   thumbnailUrl?: string;
+  youtubeVideoId?: string;
+  videoIds: Set<string>;
   hasCore: boolean;
 }
 
@@ -90,6 +93,8 @@ function getOrCreate(byAd: Map<string, Accum>, row: any): Accum | null {
       spend: 0,
       conversions: 0,
       thumbnailUrl: undefined,
+      youtubeVideoId: undefined,
+      videoIds: new Set(),
       hasCore: false,
     };
     byAd.set(key, acc);
@@ -176,9 +181,14 @@ export async function fetchGoogleAdsAds(rangeKey: DateRangeKey = "month"): Promi
     const rows = await fetchLayer(VIDEO_FIELDS, discovery.dateFrom, discovery.dateTo);
     for (const row of rows) {
       const acc = getOrCreate(byAd, row);
-      if (!acc || acc.thumbnailUrl) continue;
+      if (!acc) continue;
       const videoId = row.video_id ? String(row.video_id) : "";
-      if (videoId) acc.thumbnailUrl = youtubeThumbnailUrl(videoId);
+      if (!videoId) continue;
+      acc.videoIds.add(videoId);
+      if (!acc.thumbnailUrl) {
+        acc.thumbnailUrl = youtubeThumbnailUrl(videoId);
+        acc.youtubeVideoId = videoId;
+      }
     }
   } catch (err: any) {
     warnings.push(
@@ -207,6 +217,8 @@ export async function fetchGoogleAdsAds(rangeKey: DateRangeKey = "month"): Promi
       cpl: acc.conversions > 0 ? acc.spend / acc.conversions : 0,
       conversions: acc.conversions,
       thumbnailUrl: acc.thumbnailUrl,
+      youtubeVideoId: acc.youtubeVideoId,
+      videoVariantCount: acc.videoIds.size > 1 ? acc.videoIds.size : undefined,
     }));
 
   return { ads, warnings };

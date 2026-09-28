@@ -53,7 +53,7 @@ Mismos query params que `/api/campaigns`. `CONNECTED_PLATFORMS` en [`app/api/ads
 
 `ad_id`/`ad_name` verificados contra `windsor.ai/data-field/<connector>/` de cada uno antes de escribir los fetchers. Meta repite la misma trampa que a nivel campaña: el nombre de campaña ahí es `campaign`, no `campaign_name` (`windsorAdsMeta.ts` ya lo tiene en cuenta).
 
-Tipo `AdRow` (igual para las 3 plataformas, sin campos exclusivos): `accountId/Name`, `campaignId/Name`, `adId/Name`, `impressions`, `clicks`, `cpm`, `ctr`, `cpl`, `conversions`, `thumbnailUrl?`. `spend` se acumula internamente en cada fetcher (para `cpm`/`cpl`) pero no se expone en `AdRow` — no hace falta a nivel anuncio. Sin cuota de subasta/calidad (Google) ni rankings/% video visto (Meta) — quedaron fuera de esta primera versión de Anuncios a propósito, ver la nota arriba y el comentario al principio de `windsorAdsMeta.ts`.
+Tipo `AdRow` (igual para las 3 plataformas, sin campos exclusivos salvo los dos de Google marcados abajo): `accountId/Name`, `campaignId/Name`, `adId/Name`, `impressions`, `clicks`, `cpm`, `ctr`, `cpl`, `conversions`, `thumbnailUrl?`, `youtubeVideoId?` (solo Google — el video real detrás de `thumbnailUrl`, para embeber el reproductor en el lightbox), `videoVariantCount?` (solo Google, solo cuando hay más de un video — Demand Gen puede rotar varios videos bajo el mismo anuncio). `spend` se acumula internamente en cada fetcher (para `cpm`/`cpl`) pero no se expone en `AdRow` — no hace falta a nivel anuncio. Sin cuota de subasta/calidad (Google) ni rankings/% video visto (Meta) — quedaron fuera de esta primera versión de Anuncios a propósito, ver la nota arriba y el comentario al principio de `windsorAdsMeta.ts`.
 
 ### `thumbnailUrl` — creativo real del anuncio
 
@@ -65,11 +65,20 @@ Verificado en vivo 2026-09-28 contra la cuenta real de Taquión, campo distinto 
 | TikTok Ads | `video_thumbnail_url` | 100% poblado (todos los anuncios reales de esta cuenta son video). `image_url` vino `null` en todos los casos probados — sin creativos de imagen estática en esta cuenta. |
 | Google Ads | *(derivado)* de `video_id` | Windsor no tiene un campo de thumbnail propio para Google. Los anuncios reales de esta cuenta no son RSA de texto — son `VIDEO_RESPONSIVE_AD`/`DEMAND_GEN_VIDEO_RESPONSIVE_AD` (YouTube/Discover), y sí traen `video_id`. La miniatura se arma del lado del código: `https://img.youtube.com/vi/<video_id>/hqdefault.jpg` (URL pública de YouTube, sin firma ni vencimiento). |
 
-`video_id` en Google Ads pertenece al recurso `VIDEO`, **incompatible** con los campos de anuncio (`account_id`/`ad_id`/`spend`/etc.) en la misma consulta — error real verificado: `"Cannot select fields from ... resource, since the resource is incompatible with the resource in FROM clause"`. Por eso `lib/windsorAds.ts` lo trae en una tercera capa aparte (`VIDEO_FIELDS`), no fatal si falla. Un mismo `ad_id` puede traer varios `video_id` (Demand Gen rota varios videos bajo un mismo anuncio) — se usa el primero que llega.
+`video_id` en Google Ads pertenece al recurso `VIDEO`, **incompatible** con los campos de anuncio (`account_id`/`ad_id`/`spend`/etc.) en la misma consulta — error real verificado: `"Cannot select fields from ... resource, since the resource is incompatible with the resource in FROM clause"`. Por eso `lib/windsorAds.ts` lo trae en una tercera capa aparte (`VIDEO_FIELDS`), no fatal si falla. Un mismo `ad_id` puede traer varios `video_id` (Demand Gen rota varios videos bajo un mismo anuncio) — se usa el primero que llega para `thumbnailUrl`/`youtubeVideoId`, pero se cuentan todos en `videoVariantCount`.
 
 Las URLs de Meta y TikTok vienen **firmadas con vencimiento** (parámetro `oe=` en la URL) — nunca se cachean ni se guardan, se piden frescas en cada consulta (ya es el comportamiento por defecto de estos fetchers). La de Google (YouTube) es pública y estable.
 
 `thumbnailUrl` es `undefined` cuando Windsor no la trajo para ese anuncio puntual — la tarjeta (`AnunciosView.tsx`) cae al bloque de color con el nombre de la plataforma, mismo comportamiento que tenía antes de este campo.
+
+### UI de `AnunciosView.tsx` sobre este campo
+
+- **Click en la miniatura** abre un lightbox con la imagen en grande — para Google, si hay `youtubeVideoId`, embebe el reproductor real de YouTube en vez de solo la miniatura estática.
+- **Imagen rota** (URL firmada vencida, red, etc.): `onError` del `<img>` marca ese `adId` como roto y cae al bloque de color de siempre — no se reintenta ni se muestra el ícono roto del navegador.
+- **Badge "+N"** sobre la miniatura cuando `videoVariantCount` está presente (Demand Gen con varios videos bajo un mismo anuncio).
+- **Badge "Mejor CTR/CPL/..."** sobre la miniatura del anuncio top de cada grupo de campaña — usa el criterio del selector de orden (`ctr` por defecto si está en "Orden original"), no aparece con 1 solo anuncio en el grupo, y para CPL no se le pone el badge a un anuncio sin conversiones (sería "sin dato", no "el mejor").
+- **Buscador** por nombre de anuncio/campaña, sobre la lista ya filtrada por cuenta+actividad — no toca el sidebar de cuentas.
+- **Grupos de campaña colapsables** — clickeando el encabezado del grupo.
 
 En la vista (`AnunciosView.tsx`), los anuncios se agrupan por campaña (para comparar variantes creativas de un mismo test) y se pueden ordenar dentro de cada grupo por CPL/CTR/impresiones — el orden entre grupos no cambia. El filtro "Solo con actividad" (`impressions > 0`, activado por defecto — ver la nota de `AdRow` arriba, no hay `spend` a este nivel) y el selector de cuentas de la barra lateral también aplican acá, con el mismo patrón que Campañas.
 
