@@ -41,3 +41,9 @@ El panel **interno de Ignite es la prioridad inmediata**. La capa de multiusuari
 ## Estado de implementación
 
 Ver [estado actual y limitaciones](./estado-y-limitaciones.md) para qué de este plan ya está hecho y qué sigue pendiente.
+
+## Una excepción puntual: Vercel Global Config para el "Total presupuesto" manual
+
+La capa de almacenamiento sigue siendo, en el plan de arriba, un problema no resuelto todavía (Supabase, fase pendiente). La única pieza de persistencia propia que existe hoy en el proyecto es el "Total presupuesto" manual de Finanzas (ver [`lib/financeBudget.ts`](../../lib/financeBudget.ts) y [variables de entorno](../reference/variables-de-entorno.md)), guardado en un Vercel Global Config — no en Supabase.
+
+No es una contradicción con la decisión de arriba: Global Config resuelve un caso muy distinto al de "guardar histórico para consultar/cruzar" — es un único valor, escrito a mano muy de vez en cuando, leído en cada carga del dashboard. Traer Supabase entero (proyecto, auth, RLS) para un solo número hubiera sido la misma complejidad de más que ya se descartó arriba para BigQuery. Si en algún momento este proyecto necesita guardar **más de un valor manual** o **histórico** de lo que sea, ahí sí correspondería evaluar si Global Config sigue alcanzando o si es el momento de adelantar la capa de Supabase — no se adelantó preventivamente.
