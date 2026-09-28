@@ -531,7 +531,6 @@ export default function AnunciosView() {
 
       <footer className="foot">
         <span>Fuente de datos: {data.source === "windsor" ? "Windsor.ai (en vivo)" : "mock"}</span>
-        <span>Perfil Medios — v1, arranca con Google Ads</span>
       </footer>
     </div>
   );

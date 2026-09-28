@@ -499,7 +499,6 @@ export default function MediosView() {
 
       <footer className="foot">
         <span>Fuente de datos: {allMock ? "mock" : "Windsor.ai (en vivo)"}</span>
-        <span>Perfil Medios — v1, arranca con Google Ads</span>
       </footer>
     </div>
   );
