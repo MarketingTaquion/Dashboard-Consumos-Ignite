@@ -119,6 +119,7 @@ export interface AdRow {
   adName: string;
   impressions: number;
   clicks: number;
+  spend: number; // real, ARS — se acumulaba internamente en los 3 fetchers (para cpm/cpl) sin exponerse hasta que se pidió como métrica propia
   cpm: number; // spend / impressions * 1000; 0 si impressions es 0
   ctr: number; // %, 0-100
   cpl: number; // spend / conversions; 0 si conversions es 0
