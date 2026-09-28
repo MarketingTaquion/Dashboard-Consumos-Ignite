@@ -107,7 +107,7 @@ export async function setManualBudget(value: number): Promise<{ ok: boolean; err
     let res = await patchBudgetItem(token, "update", value);
     if (!res.ok) {
       const t = await res.text().catch(() => "");
-      if (/not.?exist/i.test(t)) {
+      if (/not.?found|non-?existing?/i.test(t)) {
         res = await patchBudgetItem(token, "create", value);
       } else {
         throw new Error(`HTTP ${res.status} — ${t.slice(0, 200)}`);
