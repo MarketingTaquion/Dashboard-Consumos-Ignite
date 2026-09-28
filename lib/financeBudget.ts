@@ -91,20 +91,27 @@ async function patchBudgetItem(token: string, operation: "update" | "create", va
 
 /**
  * La documentación de Vercel lista "upsert" como operación válida, pero en la
- * práctica devuelve 404 "Edge Config Item not found" al usarla sobre una
- * clave que todavía no existe (comportamiento verificado en vivo, no en la
- * doc). Por eso acá se intenta "update" primero y, solo si falla porque la
- * clave no existe todavía, se reintenta con "create" — cubre tanto la
- * primera carga (Finanzas todavía no cargó ningún valor) como ediciones
- * posteriores.
+ * práctica falla al usarla sobre una clave que todavía no existe — y el
+ * código de estado varía según la operación (404 "Edge Config Item not
+ * found" con "upsert", 400 "Can not update non-existing Edge Config item"
+ * con "update"; comportamiento verificado en vivo, no documentado así). Por
+ * eso acá se intenta "update" primero y, si el mensaje de error indica que
+ * la clave no existe (sin importar el código HTTP exacto), se reintenta con
+ * "create" — cubre tanto la primera carga (Finanzas todavía no cargó ningún
+ * valor) como ediciones posteriores.
  */
 export async function setManualBudget(value: number): Promise<{ ok: boolean; error?: string }> {
   const token = process.env.VERCEL_API_TOKEN;
   if (!token) return { ok: false, error: "Falta la variable de entorno VERCEL_API_TOKEN en este entorno." };
   try {
     let res = await patchBudgetItem(token, "update", value);
-    if (res.status === 404) {
-      res = await patchBudgetItem(token, "create", value);
+    if (!res.ok) {
+      const t = await res.text().catch(() => "");
+      if (/not.?exist/i.test(t)) {
+        res = await patchBudgetItem(token, "create", value);
+      } else {
+        throw new Error(`HTTP ${res.status} — ${t.slice(0, 200)}`);
+      }
     }
     if (!res.ok) {
       const t = await res.text().catch(() => "");
