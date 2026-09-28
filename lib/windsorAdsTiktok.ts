@@ -19,6 +19,14 @@ import { resolveDateRange, discoveryWindowFor, type DateRangeKey } from "./winds
  * confirmar todavía si Windsor las expone también agregadas por anuncio
  * individual — se suman en una futura iteración si hace falta.
  *
+ * `video_thumbnail_url` — verificado en vivo 2026-09-28 contra la cuenta
+ * real de Taquión: viene poblado en el 100% de los anuncios (todos son
+ * video en esta cuenta). `image_url` también es un campo válido, pero vino
+ * `null` en absolutamente todos los anuncios reales probados — esta cuenta
+ * de TikTok no tiene ningún creativo de imagen estática. Convive bien con
+ * spend/impressions/clicks en la misma consulta. Misma advertencia que Meta:
+ * la URL viene firmada con vencimiento, no se puede cachear.
+ *
  * SOLO SERVER-SIDE.
  */
 
@@ -27,7 +35,7 @@ const CONNECTOR = "tiktok";
 
 const JOIN_FIELDS = "account_id,account_name,campaign_id,campaign_name,ad_id,ad_name,date";
 const DISCOVERY_FIELDS = "account_id,account_name,campaign_id,campaign_name,ad_id,ad_name";
-const CORE_FIELDS = `${JOIN_FIELDS},spend,conversions,impressions,clicks`;
+const CORE_FIELDS = `${JOIN_FIELDS},spend,conversions,impressions,clicks,video_thumbnail_url`;
 
 interface Accum {
   accountId: string;
@@ -40,6 +48,7 @@ interface Accum {
   clicks: number;
   spend: number;
   conversions: number;
+  thumbnailUrl?: string;
   hasCore: boolean;
 }
 
@@ -62,6 +71,7 @@ function getOrCreate(byAd: Map<string, Accum>, row: any): Accum | null {
       clicks: 0,
       spend: 0,
       conversions: 0,
+      thumbnailUrl: undefined,
       hasCore: false,
     };
     byAd.set(key, acc);
@@ -114,6 +124,7 @@ export async function fetchTiktokAds(rangeKey: DateRangeKey = "month"): Promise<
       acc.clicks += Number(row.clicks ?? 0);
       acc.spend += Number(row.spend ?? 0);
       acc.conversions += Number(row.conversions ?? 0);
+      if (!acc.thumbnailUrl && row.video_thumbnail_url) acc.thumbnailUrl = String(row.video_thumbnail_url);
     }
   } catch (err: any) {
     warnings.push(`Windsor.ai (TikTok Ads, anuncios): falló la consulta principal. Detalle: ${err?.message || err}`);
@@ -155,6 +166,7 @@ export async function fetchTiktokAds(rangeKey: DateRangeKey = "month"): Promise<
       ctr: acc.impressions > 0 ? (acc.clicks / acc.impressions) * 100 : 0,
       cpl: acc.conversions > 0 ? acc.spend / acc.conversions : 0,
       conversions: acc.conversions,
+      thumbnailUrl: acc.thumbnailUrl,
     }));
 
   return { ads, warnings };

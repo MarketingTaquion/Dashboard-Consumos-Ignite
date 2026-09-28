@@ -123,6 +123,12 @@ export interface AdRow {
   ctr: number; // %, 0-100
   cpl: number; // spend / conversions; 0 si conversions es 0
   conversions: number;
+  // Miniatura del creativo real (imagen o video) — undefined si Windsor no
+  // la trajo para ese anuncio puntual (nunca se fabrica un placeholder acá,
+  // eso lo decide la UI). Campo distinto por plataforma: `thumbnail_url` en
+  // Meta, `video_thumbnail_url` en TikTok, derivada de `video_id` en Google
+  // (ver lib/windsorAds.ts, lib/windsorAdsMeta.ts, lib/windsorAdsTiktok.ts).
+  thumbnailUrl?: string;
 }
 
 export interface AdsResponse {

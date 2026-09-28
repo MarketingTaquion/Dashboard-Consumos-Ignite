@@ -27,6 +27,17 @@ import { resolveDateRange, discoveryWindowFor, type DateRangeKey } from "./winds
  * verificado antes que el núcleo (spend/impresiones/clicks por anuncio)
  * funciona solo.
  *
+ * `thumbnail_url` — verificado en vivo 2026-09-28 contra la cuenta real de
+ * Taquión: viene poblado en el 100% de los anuncios (imagen estática, video,
+ * lo que sea), a diferencia de `image_url` (también válido, pero viene
+ * `null` en los anuncios de video). Por eso se usa `thumbnail_url` como
+ * miniatura del creativo, no `image_url`. Convive bien con
+ * spend/impressions/clicks en la misma consulta (no hace falta una capa
+ * aparte, a diferencia de Google Ads — ver lib/windsorAds.ts). La URL viene
+ * firmada por Facebook CDN con vencimiento (parámetro `oe=`) — no se puede
+ * cachear ni guardar de un día para el otro, hay que pedirla fresca en cada
+ * consulta (ya es lo que hace este archivo).
+ *
  * SOLO SERVER-SIDE.
  */
 
@@ -35,7 +46,7 @@ const CONNECTOR = "facebook";
 
 const JOIN_FIELDS = "account_id,account_name,campaign_id,campaign,ad_id,ad_name,date";
 const DISCOVERY_FIELDS = "account_id,account_name,campaign_id,campaign,ad_id,ad_name";
-const CORE_FIELDS = `${JOIN_FIELDS},spend,conversions,impressions,clicks`;
+const CORE_FIELDS = `${JOIN_FIELDS},spend,conversions,impressions,clicks,thumbnail_url`;
 
 interface Accum {
   accountId: string;
@@ -48,6 +59,7 @@ interface Accum {
   clicks: number;
   spend: number;
   conversions: number;
+  thumbnailUrl?: string;
   hasCore: boolean;
 }
 
@@ -71,6 +83,7 @@ function getOrCreate(byAd: Map<string, Accum>, row: any): Accum | null {
       clicks: 0,
       spend: 0,
       conversions: 0,
+      thumbnailUrl: undefined,
       hasCore: false,
     };
     byAd.set(key, acc);
@@ -128,6 +141,7 @@ export async function fetchMetaAds(rangeKey: DateRangeKey = "month"): Promise<{ 
       acc.clicks += Number(row.clicks ?? 0);
       acc.spend += Number(row.spend ?? 0);
       acc.conversions += Number(row.conversions ?? 0);
+      if (!acc.thumbnailUrl && row.thumbnail_url) acc.thumbnailUrl = String(row.thumbnail_url);
     }
   } catch (err: any) {
     warnings.push(`Windsor.ai (Meta Ads, anuncios): falló la consulta principal. Detalle: ${err?.message || err}`);
@@ -173,6 +187,7 @@ export async function fetchMetaAds(rangeKey: DateRangeKey = "month"): Promise<{ 
       ctr: acc.impressions > 0 ? (acc.clicks / acc.impressions) * 100 : 0,
       cpl: acc.conversions > 0 ? acc.spend / acc.conversions : 0,
       conversions: acc.conversions,
+      thumbnailUrl: acc.thumbnailUrl,
     }));
 
   return { ads, warnings };
