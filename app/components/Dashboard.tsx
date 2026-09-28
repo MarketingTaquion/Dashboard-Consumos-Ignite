@@ -166,6 +166,16 @@ export default function Dashboard() {
   // dormidas.
   const [onlyActive, setOnlyActive] = useState(true);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; day: number } | null>(null);
+  // "Total presupuesto" (Finanzas) es manual desde acá — a pedido explícito
+  // 2026-09-28, lo carga el gerente de Finanzas (el total de TODOS los
+  // meses, no algo que dependa del filtro de período elegido). Ver
+  // lib/financeBudget.ts. null = todavía no se cargó ningún valor.
+  const [manualBudget, setManualBudget] = useState<number | null>(null);
+  const [manualBudgetLoaded, setManualBudgetLoaded] = useState(false);
+  const [editingBudget, setEditingBudget] = useState(false);
+  const [budgetInput, setBudgetInput] = useState("");
+  const [savingBudget, setSavingBudget] = useState(false);
+  const [budgetSaveError, setBudgetSaveError] = useState<string | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const dateMenuRef = useRef<HTMLDivElement>(null);
 
@@ -192,6 +202,49 @@ export default function Dashboard() {
       .then((body: SpendResponse) => setData(body))
       .catch((err) => setError(String(err?.message || err)));
   }, [datePreset]);
+
+  // Total presupuesto manual — un solo valor para todo el dashboard, no
+  // depende de datePreset (ver la nota de manualBudget más arriba). Se
+  // carga una sola vez.
+  useEffect(() => {
+    fetch("/api/finance-budget")
+      .then((r) => r.json())
+      .then((body: { value: number | null }) => setManualBudget(body.value))
+      .catch(() => setManualBudget(null))
+      .finally(() => setManualBudgetLoaded(true));
+  }, []);
+
+  function startEditBudget() {
+    setBudgetInput(manualBudget === null ? "" : String(Math.round(manualBudget)));
+    setBudgetSaveError(null);
+    setEditingBudget(true);
+  }
+  function cancelEditBudget() {
+    setEditingBudget(false);
+    setBudgetSaveError(null);
+  }
+  function saveBudget() {
+    const value = Number(budgetInput);
+    if (!Number.isFinite(value) || value < 0) {
+      setBudgetSaveError("Ingresá un número válido, mayor o igual a 0.");
+      return;
+    }
+    setSavingBudget(true);
+    setBudgetSaveError(null);
+    fetch("/api/finance-budget", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ value }),
+    })
+      .then((r) => r.json())
+      .then((body: { ok: boolean; error?: string }) => {
+        if (!body.ok) throw new Error(body.error || "Error desconocido");
+        setManualBudget(value);
+        setEditingBudget(false);
+      })
+      .catch((err) => setBudgetSaveError(String(err?.message || err)))
+      .finally(() => setSavingBudget(false));
+  }
 
   // "Actividad" = gasto real acumulado > 0 — no "tiene campañas" (una cuenta
   // puede tener campañas descubiertas en $0, eso no es actividad real).
@@ -347,12 +400,11 @@ export default function Dashboard() {
 
   const colCount = 7 + (compareOn ? 1 : 0);
 
-  // ---- totales agregados + gasto/presupuesto por plataforma (chips pedidos a mano) ----
-  let totalBudgetEnabled = 0;
+  // ---- total gastado + gasto/presupuesto por plataforma (chips pedidos a mano) ----
+  // "Total presupuesto" ya no se calcula acá — ver manualBudget arriba.
   let totalSpendEnabled = 0;
   clientsIncluded.forEach((c) => {
     const frac = enabledMixFrac(c, enabled);
-    totalBudgetEnabled += c.budget * frac;
     totalSpendEnabled += c.spend8 * frac;
   });
 
@@ -486,7 +538,37 @@ export default function Dashboard() {
           </div>
           <div className="stat-chip">
             <span className="stat-label">Total presupuesto</span>
-            <span className="stat-value num">{fmtCompact(totalBudgetEnabled)}</span>
+            {editingBudget ? (
+              <span className="budget-edit-row">
+                <input
+                  type="number"
+                  min={0}
+                  className="budget-manual-input num"
+                  value={budgetInput}
+                  onChange={(e) => setBudgetInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") saveBudget();
+                    if (e.key === "Escape") cancelEditBudget();
+                  }}
+                  autoFocus
+                />
+                <button className="link-btn" onClick={saveBudget} disabled={savingBudget} aria-label="Guardar">
+                  {savingBudget ? "…" : "✓"}
+                </button>
+                <button className="link-btn" onClick={cancelEditBudget} aria-label="Cancelar">
+                  ✕
+                </button>
+              </span>
+            ) : (
+              <button
+                className="stat-value num budget-manual-value"
+                onClick={startEditBudget}
+                title="Cargado a mano por Finanzas — click para editar"
+              >
+                {!manualBudgetLoaded ? "…" : manualBudget === null ? "Cargar" : fmtCompact(manualBudget)}
+              </button>
+            )}
+            {budgetSaveError && <div className="budget-edit-error">{budgetSaveError}</div>}
           </div>
           <div className="stat-chip">
             <span className="stat-label">Total gastado</span>

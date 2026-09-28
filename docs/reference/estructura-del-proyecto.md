@@ -19,6 +19,7 @@ app/
     campaigns/route.ts               # GET /api/campaigns — ver api-medios.md (Medios, nivel campaña)
     ads/route.ts                     # GET /api/ads — ver api-medios.md (Medios, nivel anuncio)
     platform-comparison/route.ts      # GET /api/platform-comparison — ver api-medios.md
+    finance-budget/route.ts           # GET/POST /api/finance-budget — Total presupuesto manual (Finanzas), ver lib/financeBudget.ts
 lib/
   types.ts                          # Tipos compartidos (PlatformKey, ClientData, CampaignRow, AdRow, ...)
   mockData.ts                        # Dataset de ejemplo de Finanzas — los 4 clientes ficticios
@@ -29,6 +30,7 @@ lib/
   windsorAds.ts / windsorAdsMeta.ts / windsorAdsTiktok.ts   # Fetchers de anuncio, uno por plataforma
   financeCampaigns.ts                  # Desglose de campañas por cuenta para Finanzas (reagrupa los de arriba)
   mediaPlan.ts                         # Lee la hoja de proyectados (Google Sheets vía Windsor)
+  financeBudget.ts                     # Lee/escribe el Total presupuesto manual en Vercel Global Config (ver variables-de-entorno.md)
   googleAds.ts                         # Integración directa a Google Ads API (fallback, ver conectar-google-ads.md)
 docs/                                  # Esta documentación
 .claude/launch.json                     # Config para levantar el dev server desde Claude Code
@@ -74,6 +76,8 @@ lib/windsorAdsMeta.ts ───────────┤
 lib/windsorAdsTiktok.ts ─────────┘
 
 lib/windsor.ts (fetchPlatformComparison) ──→ app/api/platform-comparison/route.ts ──→ (fetch) ──→ ComparacionView.tsx
+
+lib/financeBudget.ts (Vercel Global Config) ──→ app/api/finance-budget/route.ts ──→ (fetch) ──→ Dashboard.tsx
 ```
 
 Ningún componente de cliente importa un fetcher (`windsor*.ts`, `mediaPlan.ts`, `mockData.ts`, etc.) directamente — todo pasa por `fetch("/api/...")` dentro de un `useEffect`. Esto es importante: **las credenciales (`WINDSOR_API_KEY`, las de Google Ads) nunca llegan al navegador**, solo se usan server-side dentro de las API routes. Los archivos `lib/windsor*.ts` y `lib/mediaPlan.ts` tienen el comentario `SOLO SERVER-SIDE` en su cabecera para dejarlo explícito.
