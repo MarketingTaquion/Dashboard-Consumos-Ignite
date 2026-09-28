@@ -55,6 +55,29 @@ function sortAdsBy(ads: AdRow[], sortKey: SortKey): AdRow[] {
   return arr;
 }
 
+// Badge "Mejor X" dentro de un grupo — independiente del orden elegido para
+// la grilla (SortKey acá puede ser "default", que no ordena nada): si no
+// hay un criterio explícito se usa CTR, el más representativo de "qué
+// variante conviene escalar" a simple vista. Ningún badge con 1 solo
+// anuncio en el grupo (no hay con qué comparar) ni si el "mejor" por CPL en
+// realidad no tiene conversiones (sería "sin dato", no "el mejor").
+function bestAdInGroup(ads: AdRow[], sortKey: SortKey): { adId: string; label: string } | null {
+  if (ads.length < 2) return null;
+  const criterion = sortKey === "default" ? "ctr" : sortKey;
+  if (criterion === "cpl") {
+    const withConversions = ads.filter((a) => a.conversions > 0);
+    if (withConversions.length === 0) return null;
+    const top = [...withConversions].sort((a, b) => a.cpl - b.cpl)[0];
+    return { adId: top.adId, label: "Mejor CPL" };
+  }
+  if (criterion === "impressions") {
+    const top = [...ads].sort((a, b) => b.impressions - a.impressions)[0];
+    return { adId: top.adId, label: "Más impresiones" };
+  }
+  const top = [...ads].sort((a, b) => b.ctr - a.ctr)[0];
+  return { adId: top.adId, label: "Mejor CTR" };
+}
+
 // Un anuncio pertenece a una sola cuenta + campaña — se agrupan así para
 // comparar de un vistazo las variantes creativas de un mismo test
 // (a pedido explícito 2026-09-25), en vez de una grilla plana.
@@ -101,6 +124,18 @@ export default function AnunciosView() {
   // nivel cuenta a partir de los anuncios cargados.
   const [accountKey, setAccountKey] = useState<string>("all");
   const [sortKey, setSortKey] = useState<SortKey>("default");
+  // Buscador por nombre de anuncio o de campaña — filtra la grilla, no el
+  // sidebar de cuentas (se busca DENTRO de lo que ya se está mostrando).
+  const [searchQuery, setSearchQuery] = useState("");
+  // Grupos de campaña colapsados manualmente — guarda la clave del grupo
+  // (accountId:campaignId), no el estado "abierto" (así un grupo nuevo
+  // siempre arranca expandido por defecto).
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  // Miniaturas que fallaron al cargar (URL vencida, red, etc.) — cae al
+  // bloque de color de siempre en vez de mostrar el ícono roto del navegador.
+  const [brokenThumbs, setBrokenThumbs] = useState<Set<string>>(new Set());
+  // Anuncio con el lightbox abierto (preview grande) — null = cerrado.
+  const [lightboxAd, setLightboxAd] = useState<AdRow | null>(null);
   const dateMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -120,9 +155,20 @@ export default function AnunciosView() {
     setAccountKey("all");
   }, [platform, datePreset]);
 
+  // Cierra el lightbox con Escape — patrón estándar de modal.
+  useEffect(() => {
+    if (!lightboxAd) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setLightboxAd(null);
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [lightboxAd]);
+
   useEffect(() => {
     setData(null);
     setError(null);
+    setBrokenThumbs(new Set());
     const range = datePreset === "custom" ? "month" : datePreset;
     // Timeout del lado del cliente — verificado en vivo 2026-09-21: la
     // consulta de anuncios de Meta se quedó colgada en "Cargando
@@ -166,6 +212,19 @@ export default function AnunciosView() {
     return (
       <div className="wrap">
         <div className="loading-state">Cargando anuncios…</div>
+        <div className="ad-grid" aria-hidden="true">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div className="ad-card ad-skeleton" key={i}>
+              <div className="ad-thumb ad-skeleton-block" />
+              <div className="ad-body">
+                <div className="ad-skeleton-block ad-skeleton-line" />
+                {Array.from({ length: 4 }).map((_, j) => (
+                  <div className="ad-skeleton-block ad-skeleton-row" key={j} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -184,8 +243,26 @@ export default function AnunciosView() {
     if (!accountMap.has(ad.accountId)) accountMap.set(ad.accountId, ad.accountName);
   });
   const accounts = [...accountMap.entries()].map(([accountId, accountName]) => ({ accountId, accountName }));
-  const visibleAds = accountKey === "all" ? activeAds : activeAds.filter((ad) => ad.accountId === accountKey);
+  const accountFilteredAds = accountKey === "all" ? activeAds : activeAds.filter((ad) => ad.accountId === accountKey);
+
+  // Buscador — sobre nombre de anuncio o de campaña, no toca el sidebar de
+  // cuentas (se busca dentro de la cuenta/plataforma ya elegida).
+  const searchTerm = searchQuery.trim().toLowerCase();
+  const visibleAds = searchTerm
+    ? accountFilteredAds.filter(
+        (ad) => ad.adName.toLowerCase().includes(searchTerm) || ad.campaignName.toLowerCase().includes(searchTerm)
+      )
+    : accountFilteredAds;
   const campaignGroups = groupByCampaign(visibleAds);
+
+  function toggleGroupCollapsed(key: string) {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   return (
     <div className="wrap">
@@ -320,54 +397,136 @@ export default function AnunciosView() {
         <div className="card">
           <h2>Anuncios — {activeLabel}</h2>
           <div className="card-sub">Un nivel más de detalle que la tabla de campañas — mismas métricas, ahora por pieza individual.</div>
-  
+
+          <input
+            type="text"
+            className="ad-search-input"
+            placeholder="Buscar por anuncio o campaña…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+
           {visibleAds.length === 0 ? (
             <div style={{ color: "var(--text-muted)", marginTop: 14 }}>
               {data.ads.length === 0 ? "Sin anuncios para mostrar." : "Sin anuncios con los filtros elegidos."}
             </div>
           ) : (
-            campaignGroups.map((g) => (
-              <div className="ad-campaign-group" key={g.key}>
-                <h3 className="ad-campaign-heading">
-                  {g.campaignName}
-                  <span className="ad-campaign-account">{g.accountName}</span>
-                </h3>
-                <div className="ad-grid">
-                  {sortAdsBy(g.ads, sortKey).map((ad) => (
-                    <div className="ad-card" key={ad.adId}>
-                      <div
-                        className="ad-thumb"
-                        style={
-                          !ad.thumbnailUrl && platform !== "google"
-                            ? { background: `linear-gradient(135deg, var(--plat-${platform}), color-mix(in srgb, var(--plat-${platform}) 55%, #000))` }
-                            : undefined
-                        }
-                      >
-                        {ad.thumbnailUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={ad.thumbnailUrl} alt="" className="ad-thumb-img" loading="lazy" />
-                        ) : (
-                          activeLabel
-                        )}
-                      </div>
-                      <div className="ad-body">
-                        <div className="ad-name" title={ad.adName}>{ad.adName}</div>
-                        <div className="ad-metric-row"><span>Impresiones</span><span className="num">{fmtInt(ad.impressions)}</span></div>
-                        <div className="ad-metric-row"><span>Clicks</span><span className="num">{fmtInt(ad.clicks)}</span></div>
-                        <div className="ad-metric-row"><span>CPM</span><span className="num">{fmtMoney(ad.cpm)}</span></div>
-                        <div className="ad-metric-row"><span>CTR</span><span className="num">{ad.ctr.toFixed(1)}%</span></div>
-                        <div className="ad-metric-row"><span>CPL</span><span className="num">{fmtMoney(ad.cpl)}</span></div>
-                        <div className="ad-metric-row"><span>Conversiones</span><span className="num">{fmtInt(ad.conversions)}</span></div>
-                      </div>
+            campaignGroups.map((g) => {
+              const isCollapsed = collapsedGroups.has(g.key);
+              const best = bestAdInGroup(g.ads, sortKey);
+              return (
+                <div className="ad-campaign-group" key={g.key}>
+                  <button
+                    type="button"
+                    className="ad-campaign-heading"
+                    aria-expanded={!isCollapsed}
+                    onClick={() => toggleGroupCollapsed(g.key)}
+                  >
+                    <span className="ad-campaign-toggle">{isCollapsed ? "▸" : "▾"}</span>
+                    {g.campaignName}
+                    <span className="ad-campaign-account">{g.accountName}</span>
+                    <span className="ad-campaign-count">
+                      {g.ads.length} anuncio{g.ads.length === 1 ? "" : "s"}
+                    </span>
+                  </button>
+                  {!isCollapsed && (
+                    <div className="ad-grid">
+                      {sortAdsBy(g.ads, sortKey).map((ad) => {
+                        const hasThumb = !!ad.thumbnailUrl && !brokenThumbs.has(ad.adId);
+                        return (
+                          <div className="ad-card" key={ad.adId}>
+                            <div
+                              className="ad-thumb"
+                              role={hasThumb ? "button" : undefined}
+                              tabIndex={hasThumb ? 0 : undefined}
+                              aria-label={hasThumb ? `Ver creativo de ${ad.adName}` : undefined}
+                              onClick={hasThumb ? () => setLightboxAd(ad) : undefined}
+                              onKeyDown={
+                                hasThumb
+                                  ? (e) => {
+                                      if (e.key === "Enter" || e.key === " ") {
+                                        e.preventDefault();
+                                        setLightboxAd(ad);
+                                      }
+                                    }
+                                  : undefined
+                              }
+                              style={
+                                !hasThumb && platform !== "google"
+                                  ? { background: `linear-gradient(135deg, var(--plat-${platform}), color-mix(in srgb, var(--plat-${platform}) 55%, #000))` }
+                                  : undefined
+                              }
+                            >
+                              {best?.adId === ad.adId && <span className="ad-best-badge">{best.label}</span>}
+                              {ad.videoVariantCount && <span className="ad-variant-badge">+{ad.videoVariantCount - 1}</span>}
+                              {hasThumb ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={ad.thumbnailUrl}
+                                  alt=""
+                                  className="ad-thumb-img"
+                                  loading="lazy"
+                                  onError={() => setBrokenThumbs((prev) => new Set(prev).add(ad.adId))}
+                                />
+                              ) : (
+                                activeLabel
+                              )}
+                            </div>
+                            <div className="ad-body">
+                              <div className="ad-name" title={ad.adName}>{ad.adName}</div>
+                              <div className="ad-metric-row"><span>Impresiones</span><span className="num">{fmtInt(ad.impressions)}</span></div>
+                              <div className="ad-metric-row"><span>Clicks</span><span className="num">{fmtInt(ad.clicks)}</span></div>
+                              <div className="ad-metric-row"><span>CPM</span><span className="num">{fmtMoney(ad.cpm)}</span></div>
+                              <div className="ad-metric-row"><span>CTR</span><span className="num">{ad.ctr.toFixed(1)}%</span></div>
+                              <div className="ad-metric-row"><span>CPL</span><span className="num">{fmtMoney(ad.cpl)}</span></div>
+                              <div className="ad-metric-row"><span>Conversiones</span><span className="num">{fmtInt(ad.conversions)}</span></div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                  ))}
+                  )}
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
         </div>
       </div>
+
+      {lightboxAd && (
+        <div className="ad-lightbox-overlay" onClick={() => setLightboxAd(null)}>
+          <div className="ad-lightbox" onClick={(e) => e.stopPropagation()}>
+            <button className="ad-lightbox-close" aria-label="Cerrar" onClick={() => setLightboxAd(null)}>
+              ✕
+            </button>
+            <div className="ad-lightbox-media">
+              {lightboxAd.youtubeVideoId ? (
+                <iframe
+                  src={`https://www.youtube.com/embed/${lightboxAd.youtubeVideoId}`}
+                  title={lightboxAd.adName}
+                  allow="autoplay; encrypted-media"
+                  allowFullScreen
+                />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={lightboxAd.thumbnailUrl} alt="" />
+              )}
+            </div>
+            <div className="ad-lightbox-info">
+              <div className="ad-lightbox-name">{lightboxAd.adName}</div>
+              <div className="ad-lightbox-campaign">
+                {lightboxAd.campaignName} · {lightboxAd.accountName}
+              </div>
+              {lightboxAd.videoVariantCount && (
+                <div className="ad-lightbox-note">
+                  Este anuncio rota {lightboxAd.videoVariantCount} videos distintos — se muestra uno de ellos.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <footer className="foot">
         <span>Fuente de datos: {data.source === "windsor" ? "Windsor.ai (en vivo)" : "mock"}</span>

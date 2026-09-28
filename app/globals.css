@@ -303,10 +303,23 @@ footer.foot code { background: var(--surface-2); padding: 1px 5px; border-radius
   height: 110px; display: flex; align-items: center; justify-content: center; overflow: hidden;
   color: #fff; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
   background: linear-gradient(135deg, var(--plat-google), color-mix(in srgb, var(--plat-google) 55%, #000));
+  position: relative;
 }
+/* Cuando hay creativo real, la miniatura es clickeable (abre el lightbox) —
+   role="button" solo se agrega en ese caso, ver AnunciosView.tsx. */
+.ad-thumb[role="button"] { cursor: pointer; }
+.ad-thumb[role="button"]:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 /* Creativo real del anuncio (Meta/TikTok/Google), cuando Windsor lo trae —
    reemplaza el bloque de color de arriba solo para esa tarjeta puntual. */
 .ad-thumb-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* Badges sobre la miniatura — "Mejor CTR/CPL/..." (bestAdInGroup) y
+   "+N" de videos que Google Demand Gen rota bajo un mismo anuncio. */
+.ad-best-badge, .ad-variant-badge {
+  position: absolute; font-size: 10px; font-weight: 700; padding: 3px 7px; border-radius: 999px;
+  text-transform: none; letter-spacing: normal; z-index: 1;
+}
+.ad-best-badge { top: 6px; left: 6px; background: var(--status-good); color: #fff; }
+.ad-variant-badge { top: 6px; right: 6px; background: rgba(0,0,0,.65); color: #fff; }
 .ad-body { padding: 12px 14px 14px; }
 /* Los nombres reales de campaña/anuncio vienen como un solo "token" largo
    separado por guiones bajos (ej. TQN_AON_META_..._EMILIA), sin espacios —
@@ -324,12 +337,55 @@ footer.foot code { background: var(--surface-2); padding: 1px 5px; border-radius
    (antes se repetía en cada tarjeta vía .ad-meta), no por anuncio. */
 .ad-campaign-group { margin-top: 22px; }
 .ad-campaign-group:first-child { margin-top: 14px; }
+/* Es un <button> (colapsa/expande el grupo) estilizado como el título que
+   ya era antes — reset de los estilos default de botón. */
 .ad-campaign-heading {
   font-size: 14px; font-weight: 700; color: var(--text-primary);
   display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; overflow-wrap: anywhere;
+  background: none; border: none; padding: 0; width: 100%; text-align: left; cursor: pointer; font-family: inherit;
 }
+.ad-campaign-heading:hover .ad-campaign-toggle { color: var(--text-primary); }
+.ad-campaign-toggle { color: var(--text-muted); font-size: 11px; flex-shrink: 0; }
 .ad-campaign-account { font-size: 12px; font-weight: 400; color: var(--text-muted); }
+.ad-campaign-count { font-size: 11.5px; font-weight: 400; color: var(--text-muted); margin-left: auto; flex-shrink: 0; }
 .ad-metric-row span:first-child { color: var(--text-muted); }
+
+.ad-search-input {
+  width: 100%; max-width: 340px; margin-top: 12px; padding: 8px 12px; font-size: 13px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text-primary);
+}
+.ad-search-input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+/* Skeleton de carga — mismas dimensiones que .ad-card/.ad-thumb/.ad-body,
+   para que no "salte" el layout cuando llegan los datos reales. */
+@keyframes ad-skeleton-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+.ad-skeleton-block { background: var(--surface-2); border-radius: 4px; animation: ad-skeleton-pulse 1.4s ease-in-out infinite; }
+.ad-skeleton .ad-thumb.ad-skeleton-block { background: var(--surface-2); border-radius: 0; }
+.ad-skeleton .ad-skeleton-line { height: 14px; width: 70%; margin-bottom: 10px; }
+.ad-skeleton .ad-skeleton-row { height: 11px; margin-bottom: 8px; }
+.ad-skeleton .ad-skeleton-row:last-child { margin-bottom: 0; width: 60%; }
+
+/* Lightbox — preview grande del creativo (imagen o video embebido de
+   YouTube para Google Ads). Overlay + click afuera o Escape para cerrar. */
+.ad-lightbox-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.7); display: flex; align-items: center; justify-content: center;
+  padding: 24px; z-index: 100;
+}
+.ad-lightbox {
+  background: var(--surface); border-radius: 8px; max-width: 640px; width: 100%; max-height: 90vh; overflow: auto;
+  position: relative;
+}
+.ad-lightbox-close {
+  position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,.55); color: #fff; border: none; border-radius: 999px;
+  width: 28px; height: 28px; cursor: pointer; font-size: 13px; z-index: 1;
+}
+.ad-lightbox-media { width: 100%; aspect-ratio: 16 / 9; background: #000; display: flex; align-items: center; justify-content: center; }
+.ad-lightbox-media img { width: 100%; height: 100%; object-fit: contain; }
+.ad-lightbox-media iframe { width: 100%; height: 100%; border: none; }
+.ad-lightbox-info { padding: 14px 16px; }
+.ad-lightbox-name { font-weight: 700; font-size: 14px; margin-bottom: 4px; overflow-wrap: anywhere; }
+.ad-lightbox-campaign { font-size: 12px; color: var(--text-muted); overflow-wrap: anywhere; }
+.ad-lightbox-note { font-size: 12px; color: var(--text-muted); margin-top: 8px; }
 
 /* Vista Comparación — barras de CPL por plataforma */
 .plat-compare-row { display: flex; align-items: center; gap: 14px; padding: 14px 0; border-top: 1px solid var(--border); }

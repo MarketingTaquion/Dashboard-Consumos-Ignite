@@ -129,6 +129,15 @@ export interface AdRow {
   // Meta, `video_thumbnail_url` en TikTok, derivada de `video_id` en Google
   // (ver lib/windsorAds.ts, lib/windsorAdsMeta.ts, lib/windsorAdsTiktok.ts).
   thumbnailUrl?: string;
+  // Solo Google Ads: el video_id real de YouTube detrás de thumbnailUrl,
+  // para poder embeber el reproductor en el lightbox de la UI (a Meta/TikTok
+  // no se les verificó todavía un campo de video reproducible, solo miniatura).
+  youtubeVideoId?: string;
+  // Solo Google Ads, y solo cuando hay más de un video real: Demand Gen
+  // puede rotar varios videos bajo el mismo anuncio — thumbnailUrl muestra
+  // el primero, este campo es la cantidad total para que la UI avise
+  // "+N variantes" en vez de mostrar un solo video en silencio.
+  videoVariantCount?: number;
 }
 
 export interface AdsResponse {
