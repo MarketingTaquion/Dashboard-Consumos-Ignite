@@ -59,6 +59,21 @@ function extraColCount(platform: PlatformKey): number {
   return 0;
 }
 
+// Mismo cálculo de pacing que Finanzas (statusForBudgetSpend en
+// Dashboard.tsx) — duplicado a propósito, ver la nota sobre DatePreset más
+// arriba. A pedido explícito 2026-09-28: Remanente y Estado, que ya tenía
+// Finanzas para sus campañas anidadas, también hacen falta acá.
+type Status = { key: "good" | "warning" | "critical"; label: string };
+function statusForBudgetSpend(budget: number, spend: number, today: number, daysInMonth: number): Status {
+  if (budget === 0) return { key: "good", label: "Sin objetivo cargado" };
+  const flat = spend / today;
+  const projected = spend + flat * (daysInMonth - today);
+  const ratio = projected / budget;
+  if (ratio > 1.1) return { key: "warning", label: "Sobre-ritmo" };
+  if (ratio < 0.85) return { key: "critical", label: "Bajo-ritmo" };
+  return { key: "good", label: "En ritmo" };
+}
+
 // Presupuesto diario recomendado = remanente / días que quedan en el
 // período, para llegar justo al presupuesto proyectado al cierre — mismo
 // concepto de pacing que ya usa Finanzas (Dashboard.tsx), acá por campaña.
@@ -367,6 +382,8 @@ export default function MediosView() {
                   <th>Campaña</th>
                   <th className="num">Presupuesto proyectado</th>
                   <th className="num">Real</th>
+                  <th className="num">Remanente</th>
+                  <th>Estado</th>
                   <th className="num">Presup. diario recom.</th>
                   <th className="num">Impr.</th>
                   <th className="num">Clicks</th>
@@ -403,7 +420,7 @@ export default function MediosView() {
                 {campaignsIncluded.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={11 + (showCombined ? 1 : extraColCount(singlePlatform!))}
+                      colSpan={13 + (showCombined ? 1 : extraColCount(singlePlatform!))}
                       style={{ color: "var(--text-muted)" }}
                     >
                       {allCampaigns.length === 0 ? "Sin campañas para mostrar." : "Sin campañas con los filtros elegidos."}
@@ -412,6 +429,8 @@ export default function MediosView() {
                 ) : (
                   campaignsIncluded.map((c) => {
                     const daily = dailyRecommended(c.budget, c.spend, today, daysInPeriod);
+                    const remaining = c.budget - c.spend;
+                    const cst = statusForBudgetSpend(c.budget, c.spend, today, daysInPeriod);
                     const platMeta = PLATFORMS.find((p) => p.key === c.platform);
                     return (
                     <tr key={c.platform + ":" + c.accountId + ":" + c.campaignId}>
@@ -425,6 +444,16 @@ export default function MediosView() {
                       <td>{c.campaignName}</td>
                       <td className="num">{fmtMoney(c.budget)}</td>
                       <td className="num">{fmtMoney(c.spend)}</td>
+                      <td className="num" style={{ color: remaining < 0 ? "var(--delta-bad-text)" : "var(--delta-good-text)" }}>
+                        {remaining >= 0 ? "+" : ""}
+                        {fmtMoney(remaining)}
+                      </td>
+                      <td>
+                        <span className={"pill " + cst.key}>
+                          <span className="dot" />
+                          {cst.label}
+                        </span>
+                      </td>
                       <td className="num" style={daily === undefined ? undefined : { color: daily < 0 ? "var(--delta-bad-text)" : "var(--delta-good-text)" }}>
                         {daily === undefined ? "—" : fmtDailySigned(daily)}
                       </td>
