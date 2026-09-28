@@ -53,7 +53,23 @@ Mismos query params que `/api/campaigns`. `CONNECTED_PLATFORMS` en [`app/api/ads
 
 `ad_id`/`ad_name` verificados contra `windsor.ai/data-field/<connector>/` de cada uno antes de escribir los fetchers. Meta repite la misma trampa que a nivel campaña: el nombre de campaña ahí es `campaign`, no `campaign_name` (`windsorAdsMeta.ts` ya lo tiene en cuenta).
 
-Tipo `AdRow` (igual para las 3 plataformas, sin campos exclusivos): `accountId/Name`, `campaignId/Name`, `adId/Name`, `impressions`, `clicks`, `cpm`, `ctr`, `cpl`, `conversions`. `spend` se acumula internamente en cada fetcher (para `cpm`/`cpl`) pero no se expone en `AdRow` — no hace falta a nivel anuncio. Sin cuota de subasta/calidad (Google) ni rankings/% video visto (Meta) — quedaron fuera de esta primera versión de Anuncios a propósito, ver la nota arriba y el comentario al principio de `windsorAdsMeta.ts`.
+Tipo `AdRow` (igual para las 3 plataformas, sin campos exclusivos): `accountId/Name`, `campaignId/Name`, `adId/Name`, `impressions`, `clicks`, `cpm`, `ctr`, `cpl`, `conversions`, `thumbnailUrl?`. `spend` se acumula internamente en cada fetcher (para `cpm`/`cpl`) pero no se expone en `AdRow` — no hace falta a nivel anuncio. Sin cuota de subasta/calidad (Google) ni rankings/% video visto (Meta) — quedaron fuera de esta primera versión de Anuncios a propósito, ver la nota arriba y el comentario al principio de `windsorAdsMeta.ts`.
+
+### `thumbnailUrl` — creativo real del anuncio
+
+Verificado en vivo 2026-09-28 contra la cuenta real de Taquión, campo distinto por conector (ninguno se asumió de la doc pública sin probar — la doc pública de Google/Meta llevó a nombres de campo que resultaron inválidos, ver más abajo):
+
+| Plataforma | Campo de Windsor | Notas |
+|---|---|---|
+| Meta Ads | `thumbnail_url` | 100% de los anuncios lo traen poblado (imagen o video). `image_url` también es válido pero viene `null` en los anuncios de video — por eso no se usa. Convive con spend/impressions/clicks en la misma consulta. |
+| TikTok Ads | `video_thumbnail_url` | 100% poblado (todos los anuncios reales de esta cuenta son video). `image_url` vino `null` en todos los casos probados — sin creativos de imagen estática en esta cuenta. |
+| Google Ads | *(derivado)* de `video_id` | Windsor no tiene un campo de thumbnail propio para Google. Los anuncios reales de esta cuenta no son RSA de texto — son `VIDEO_RESPONSIVE_AD`/`DEMAND_GEN_VIDEO_RESPONSIVE_AD` (YouTube/Discover), y sí traen `video_id`. La miniatura se arma del lado del código: `https://img.youtube.com/vi/<video_id>/hqdefault.jpg` (URL pública de YouTube, sin firma ni vencimiento). |
+
+`video_id` en Google Ads pertenece al recurso `VIDEO`, **incompatible** con los campos de anuncio (`account_id`/`ad_id`/`spend`/etc.) en la misma consulta — error real verificado: `"Cannot select fields from ... resource, since the resource is incompatible with the resource in FROM clause"`. Por eso `lib/windsorAds.ts` lo trae en una tercera capa aparte (`VIDEO_FIELDS`), no fatal si falla. Un mismo `ad_id` puede traer varios `video_id` (Demand Gen rota varios videos bajo un mismo anuncio) — se usa el primero que llega.
+
+Las URLs de Meta y TikTok vienen **firmadas con vencimiento** (parámetro `oe=` en la URL) — nunca se cachean ni se guardan, se piden frescas en cada consulta (ya es el comportamiento por defecto de estos fetchers). La de Google (YouTube) es pública y estable.
+
+`thumbnailUrl` es `undefined` cuando Windsor no la trajo para ese anuncio puntual — la tarjeta (`AnunciosView.tsx`) cae al bloque de color con el nombre de la plataforma, mismo comportamiento que tenía antes de este campo.
 
 En la vista (`AnunciosView.tsx`), los anuncios se agrupan por campaña (para comparar variantes creativas de un mismo test) y se pueden ordenar dentro de cada grupo por CPL/CTR/impresiones — el orden entre grupos no cambia. El filtro "Solo con actividad" (`impressions > 0`, activado por defecto — ver la nota de `AdRow` arriba, no hay `spend` a este nivel) y el selector de cuentas de la barra lateral también aplican acá, con el mismo patrón que Campañas.
 

@@ -338,12 +338,17 @@ export default function AnunciosView() {
                       <div
                         className="ad-thumb"
                         style={
-                          platform !== "google"
+                          !ad.thumbnailUrl && platform !== "google"
                             ? { background: `linear-gradient(135deg, var(--plat-${platform}), color-mix(in srgb, var(--plat-${platform}) 55%, #000))` }
                             : undefined
                         }
                       >
-                        {activeLabel}
+                        {ad.thumbnailUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={ad.thumbnailUrl} alt="" className="ad-thumb-img" loading="lazy" />
+                        ) : (
+                          activeLabel
+                        )}
                       </div>
                       <div className="ad-body">
                         <div className="ad-name" title={ad.adName}>{ad.adName}</div>

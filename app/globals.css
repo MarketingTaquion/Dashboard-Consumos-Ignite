@@ -300,10 +300,13 @@ footer.foot code { background: var(--surface-2); padding: 1px 5px; border-radius
 .ad-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 16px; margin-top: 14px; }
 .ad-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
 .ad-thumb {
-  height: 110px; display: flex; align-items: center; justify-content: center;
+  height: 110px; display: flex; align-items: center; justify-content: center; overflow: hidden;
   color: #fff; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
   background: linear-gradient(135deg, var(--plat-google), color-mix(in srgb, var(--plat-google) 55%, #000));
 }
+/* Creativo real del anuncio (Meta/TikTok/Google), cuando Windsor lo trae —
+   reemplaza el bloque de color de arriba solo para esa tarjeta puntual. */
+.ad-thumb-img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .ad-body { padding: 12px 14px 14px; }
 /* Los nombres reales de campaña/anuncio vienen como un solo "token" largo
    separado por guiones bajos (ej. TQN_AON_META_..._EMILIA), sin espacios —
