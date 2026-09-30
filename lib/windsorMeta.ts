@@ -1,4 +1,5 @@
 import type { CampaignRow } from "./types";
+import { fetchWindsorRows } from "./windsorFetch";
 import { resolveDateRange, discoveryWindowFor, type DateRangeKey } from "./windsor";
 
 /**
@@ -80,28 +81,28 @@ function getOrCreate(byCampaign: Map<string, Accum>, row: any): Accum | null {
   return acc;
 }
 
-async function fetchLayer(fields: string, dateFrom: string, dateTo: string): Promise<any[]> {
-  const params = new URLSearchParams({ api_key: process.env.WINDSOR_API_KEY!, fields, date_from: dateFrom, date_to: dateTo });
-  const res = await fetch(`${WINDSOR_BASE_URL}/${CONNECTOR}?${params.toString()}`, { cache: "no-store" });
-  if (!res.ok) {
-    const t = await res.text().catch(() => "");
-    throw new Error(`HTTP ${res.status} — ${t.slice(0, 300)}`);
-  }
-  const json = await res.json();
-  const rows = Array.isArray(json) ? json : json?.data;
-  if (!Array.isArray(rows)) throw new Error("Respuesta inesperada de Windsor.ai (ni array ni { data: [...] })");
-  return rows;
+// Timeout, reintento y límite de concurrencia: ver lib/windsorFetch.ts.
+function fetchLayer(fields: string, dateFrom: string, dateTo: string): Promise<any[]> {
+  return fetchWindsorRows(CONNECTOR, fields, dateFrom, dateTo);
 }
 
-export async function fetchMetaCampaigns(rangeKey: DateRangeKey = "month"): Promise<{ campaigns: CampaignRow[]; warnings: string[] }> {
+export async function fetchMetaCampaigns(rangeKey: DateRangeKey = "month"): Promise<{ campaigns: CampaignRow[]; warnings: string[]; failed?: boolean }> {
   const warnings: string[] = [];
   if (!process.env.WINDSOR_API_KEY) return { campaigns: [], warnings };
 
   const range = resolveDateRange(rangeKey);
   const byCampaign = new Map<string, Accum>();
 
+  // Todas las capas son independientes entre sí: se piden en paralelo, el
+  // tiempo total es el de la más lenta y no la suma.
+  const discoveryWindow = discoveryWindowFor(range);
+  const coreP = fetchLayer(CORE_FIELDS, range.dateFrom, range.dateTo);
+  const discoveryP = fetchLayer(DISCOVERY_FIELDS, discoveryWindow.dateFrom, discoveryWindow.dateTo);
+
+  for (const p of [coreP, discoveryP]) p.catch(() => {});
+
   try {
-    const rows = await fetchLayer(CORE_FIELDS, range.dateFrom, range.dateTo);
+    const rows = await coreP;
     for (const row of rows) {
       const acc = getOrCreate(byCampaign, row);
       if (!acc) continue;
@@ -121,7 +122,7 @@ export async function fetchMetaCampaigns(rangeKey: DateRangeKey = "month"): Prom
     }
   } catch (err: any) {
     warnings.push(`Windsor.ai (Meta Ads, campañas): falló la consulta principal. Detalle: ${err?.message || err}`);
-    return { campaigns: [], warnings };
+    return { campaigns: [], warnings, failed: true };
   }
 
   // Descubrimiento — ventana derivada del período elegido (ver
@@ -130,8 +131,7 @@ export async function fetchMetaCampaigns(rangeKey: DateRangeKey = "month"): Prom
   // en el período elegido no vendría en la capa 1, y desaparecería en vez
   // de mostrar $0 real.
   try {
-    const discovery = discoveryWindowFor(range);
-    const rows = await fetchLayer(DISCOVERY_FIELDS, discovery.dateFrom, discovery.dateTo);
+    const rows = await discoveryP;
     for (const row of rows) {
       const acc = getOrCreate(byCampaign, row);
       if (acc) acc.hasCore = true;

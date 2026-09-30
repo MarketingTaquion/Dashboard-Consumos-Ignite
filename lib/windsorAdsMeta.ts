@@ -1,4 +1,5 @@
 import type { AdRow } from "./types";
+import { fetchWindsorRows, reasonMessage } from "./windsorFetch";
 import { resolveDateRange, discoveryWindowFor, type DateRangeKey } from "./windsor";
 
 /**
@@ -91,80 +92,53 @@ function getOrCreate(byAd: Map<string, Accum>, row: any): Accum | null {
   return acc;
 }
 
-// Timeout explícito — verificado en vivo 2026-09-21: la consulta de
-// anuncios de Meta se quedó colgada indefinidamente en el preview (nunca
-// resolvió ni tiró error). Sin logs de runtime disponibles para confirmar
-// la causa exacta, pero la sospecha más fuerte es la capa de descubrimiento
-// (a nivel anuncio hay órdenes de magnitud más filas por cuenta que a nivel
-// campaña, que sí viene funcionando bien — una por creatividad). 8s deja
-// margen de sobra dentro del límite de duración de una función de Vercel y
-// evita que un layer lento cuelgue toda la request en vez de avisar y
-// seguir con lo que haya.
-const LAYER_TIMEOUT_MS = 8000;
-
-async function fetchLayer(fields: string, dateFrom: string, dateTo: string): Promise<any[]> {
-  const params = new URLSearchParams({ api_key: process.env.WINDSOR_API_KEY!, fields, date_from: dateFrom, date_to: dateTo });
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), LAYER_TIMEOUT_MS);
-  try {
-    const res = await fetch(`${WINDSOR_BASE_URL}/${CONNECTOR}?${params.toString()}`, { cache: "no-store", signal: controller.signal });
-    if (!res.ok) {
-      const t = await res.text().catch(() => "");
-      throw new Error(`HTTP ${res.status} — ${t.slice(0, 300)}`);
-    }
-    const json = await res.json();
-    const rows = Array.isArray(json) ? json : json?.data;
-    if (!Array.isArray(rows)) throw new Error("Respuesta inesperada de Windsor.ai (ni array ni { data: [...] })");
-    return rows;
-  } catch (err: any) {
-    if (err?.name === "AbortError") throw new Error(`Timeout de ${LAYER_TIMEOUT_MS / 1000}s consultando Windsor.ai`);
-    throw err;
-  } finally {
-    clearTimeout(timeout);
-  }
+// Timeout, reintento y límite de concurrencia: ver lib/windsorFetch.ts. La
+// consulta de anuncios de Meta tarda ~9s en producción (2026-09-30).
+function fetchLayer(fields: string, dateFrom: string, dateTo: string): Promise<any[]> {
+  return fetchWindsorRows(CONNECTOR, fields, dateFrom, dateTo);
 }
 
-export async function fetchMetaAds(rangeKey: DateRangeKey = "month"): Promise<{ ads: AdRow[]; warnings: string[] }> {
+export async function fetchMetaAds(rangeKey: DateRangeKey = "month"): Promise<{ ads: AdRow[]; warnings: string[]; failed?: boolean }> {
   const warnings: string[] = [];
   if (!process.env.WINDSOR_API_KEY) return { ads: [], warnings };
 
   const range = resolveDateRange(rangeKey);
   const byAd = new Map<string, Accum>();
 
-  try {
-    const rows = await fetchLayer(CORE_FIELDS, range.dateFrom, range.dateTo);
-    for (const row of rows) {
-      const acc = getOrCreate(byAd, row);
-      if (!acc) continue;
-      acc.hasCore = true;
-      acc.impressions += Number(row.impressions ?? 0);
-      acc.clicks += Number(row.clicks ?? 0);
-      acc.spend += Number(row.spend ?? 0);
-      acc.conversions += Number(row.conversions ?? 0);
-      if (!acc.thumbnailUrl && row.thumbnail_url) acc.thumbnailUrl = String(row.thumbnail_url);
-    }
-  } catch (err: any) {
-    warnings.push(`Windsor.ai (Meta Ads, anuncios): falló la consulta principal. Detalle: ${err?.message || err}`);
-    return { ads: [], warnings };
+  // Núcleo y descubrimiento son independientes: en paralelo, el tiempo total
+  // es el de la más lenta y no la suma.
+  const discovery = discoveryWindowFor(range);
+  const [coreRes, discoveryRes] = await Promise.allSettled([
+    fetchLayer(CORE_FIELDS, range.dateFrom, range.dateTo),
+    fetchLayer(DISCOVERY_FIELDS, discovery.dateFrom, discovery.dateTo),
+  ]);
+
+  if (coreRes.status === "rejected") {
+    warnings.push(`Windsor.ai (Meta Ads, anuncios): falló la consulta principal. Detalle: ${reasonMessage(coreRes)}`);
+    return { ads: [], warnings, failed: true };
+  }
+  for (const row of coreRes.value) {
+    const acc = getOrCreate(byAd, row);
+    if (!acc) continue;
+    acc.hasCore = true;
+    acc.impressions += Number(row.impressions ?? 0);
+    acc.clicks += Number(row.clicks ?? 0);
+    acc.spend += Number(row.spend ?? 0);
+    acc.conversions += Number(row.conversions ?? 0);
+    if (!acc.thumbnailUrl && row.thumbnail_url) acc.thumbnailUrl = String(row.thumbnail_url);
   }
 
   // Descubrimiento — ventana derivada del período elegido (ver
-  // discoveryWindowFor en lib/windsor.ts). Corrección 2026-09-22: esto
-  // reemplaza una ventana fija de 90 días que había quedado acá como
-  // mitigación de un cuelgue en vivo — el período elegido es el que debe
-  // delimitar toda ventana temporal, no una constante aparte; el timeout
-  // explícito de LAYER_TIMEOUT_MS ya cubre el caso de una consulta lenta.
-  try {
-    const discovery = discoveryWindowFor(range);
-    const rows = await fetchLayer(DISCOVERY_FIELDS, discovery.dateFrom, discovery.dateTo);
-    for (const row of rows) {
+  // discoveryWindowFor en lib/windsor.ts): anuncios sin actividad en el período.
+  if (discoveryRes.status === "rejected") {
+    warnings.push(
+      `Windsor.ai (Meta Ads, anuncios): no se pudo consultar el histórico ampliado para descubrir anuncios sin actividad. Detalle: ${reasonMessage(discoveryRes)}`
+    );
+  } else {
+    for (const row of discoveryRes.value) {
       const acc = getOrCreate(byAd, row);
       if (acc) acc.hasCore = true;
     }
-  } catch (err: any) {
-    warnings.push(
-      `Windsor.ai (Meta Ads, anuncios): no se pudo consultar el histórico ampliado para descubrir anuncios sin actividad. Detalle: ${err?.message || err}`
-    );
   }
 
   if (byAd.size === 0) {

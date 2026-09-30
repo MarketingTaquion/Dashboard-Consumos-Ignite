@@ -1,4 +1,5 @@
 import type { AdRow } from "./types";
+import { fetchWindsorRows, reasonMessage } from "./windsorFetch";
 import { resolveDateRange, discoveryWindowFor, type DateRangeKey } from "./windsor";
 
 /**
@@ -102,84 +103,66 @@ function getOrCreate(byAd: Map<string, Accum>, row: any): Accum | null {
   return acc;
 }
 
-// Timeout explícito — ver la nota en lib/windsorAdsMeta.ts: la misma
-// consulta de anuncios de Meta se quedó colgada en vivo. Se aplica el mismo
-// resguardo acá por las dudas, sin evidencia de que Google tenga el mismo
-// problema (ya viene funcionando bien en vivo).
-const LAYER_TIMEOUT_MS = 8000;
-
-async function fetchLayer(fields: string, dateFrom: string, dateTo: string): Promise<any[]> {
-  const params = new URLSearchParams({ api_key: process.env.WINDSOR_API_KEY!, fields, date_from: dateFrom, date_to: dateTo });
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), LAYER_TIMEOUT_MS);
-  try {
-    const res = await fetch(`${WINDSOR_BASE_URL}/${CONNECTOR}?${params.toString()}`, { cache: "no-store", signal: controller.signal });
-    if (!res.ok) {
-      const t = await res.text().catch(() => "");
-      throw new Error(`HTTP ${res.status} — ${t.slice(0, 300)}`);
-    }
-    const json = await res.json();
-    const rows = Array.isArray(json) ? json : json?.data;
-    if (!Array.isArray(rows)) throw new Error("Respuesta inesperada de Windsor.ai (ni array ni { data: [...] })");
-    return rows;
-  } catch (err: any) {
-    if (err?.name === "AbortError") throw new Error(`Timeout de ${LAYER_TIMEOUT_MS / 1000}s consultando Windsor.ai`);
-    throw err;
-  } finally {
-    clearTimeout(timeout);
-  }
+// Timeout, reintento y límite de concurrencia: ver lib/windsorFetch.ts.
+function fetchLayer(fields: string, dateFrom: string, dateTo: string): Promise<any[]> {
+  return fetchWindsorRows(CONNECTOR, fields, dateFrom, dateTo);
 }
 
-export async function fetchGoogleAdsAds(rangeKey: DateRangeKey = "month"): Promise<{ ads: AdRow[]; warnings: string[] }> {
+export async function fetchGoogleAdsAds(rangeKey: DateRangeKey = "month"): Promise<{ ads: AdRow[]; warnings: string[]; failed?: boolean }> {
   const warnings: string[] = [];
   if (!process.env.WINDSOR_API_KEY) return { ads: [], warnings };
 
   const range = resolveDateRange(rangeKey);
   const byAd = new Map<string, Accum>();
 
+  // Las 3 capas (núcleo, descubrimiento, miniatura) son independientes entre
+  // sí: se piden en paralelo, el tiempo total es el de la más lenta y no la
+  // suma. Antes iban en serie (hasta 3 x timeout).
+  const discovery = discoveryWindowFor(range);
+  const [coreRes, discoveryRes, videoRes] = await Promise.allSettled([
+    fetchLayer(CORE_FIELDS, range.dateFrom, range.dateTo),
+    fetchLayer(DISCOVERY_FIELDS, discovery.dateFrom, discovery.dateTo),
+    fetchLayer(VIDEO_FIELDS, discovery.dateFrom, discovery.dateTo),
+  ]);
+
   // Capa 1 — núcleo. Si esta falla, no hay nada que mostrar: se corta acá.
-  try {
-    const rows = await fetchLayer(CORE_FIELDS, range.dateFrom, range.dateTo);
-    for (const row of rows) {
-      const acc = getOrCreate(byAd, row);
-      if (!acc) continue;
-      acc.hasCore = true;
-      acc.impressions += Number(row.impressions ?? 0);
-      acc.clicks += Number(row.clicks ?? 0);
-      acc.spend += Number(row.spend ?? 0);
-      acc.conversions += Number(row.conversions ?? 0);
-    }
-  } catch (err: any) {
-    warnings.push(`Windsor.ai (Google Ads, anuncios): falló la consulta principal. Detalle: ${err?.message || err}`);
-    return { ads: [], warnings };
+  if (coreRes.status === "rejected") {
+    warnings.push(`Windsor.ai (Google Ads, anuncios): falló la consulta principal. Detalle: ${reasonMessage(coreRes)}`);
+    return { ads: [], warnings, failed: true };
+  }
+  for (const row of coreRes.value) {
+    const acc = getOrCreate(byAd, row);
+    if (!acc) continue;
+    acc.hasCore = true;
+    acc.impressions += Number(row.impressions ?? 0);
+    acc.clicks += Number(row.clicks ?? 0);
+    acc.spend += Number(row.spend ?? 0);
+    acc.conversions += Number(row.conversions ?? 0);
   }
 
-  // Descubrimiento — ventana derivada del período elegido (ver
-  // discoveryWindowFor en lib/windsor.ts), solo identificadores. Mismo
-  // problema ya resuelto a nivel cuenta y campaña: un anuncio pausado/sin
-  // actividad en el período elegido no vendría en la capa 1 (Windsor omite
-  // la fila en vez de mandarla en $0), y desaparecería en vez de mostrar $0
-  // real.
-  try {
-    const discovery = discoveryWindowFor(range);
-    const rows = await fetchLayer(DISCOVERY_FIELDS, discovery.dateFrom, discovery.dateTo);
-    for (const row of rows) {
+  // Descubrimiento — solo identificadores. Un anuncio pausado/sin actividad
+  // en el período elegido no vendría en la capa 1 (Windsor omite la fila en
+  // vez de mandarla en $0), y desaparecería en vez de mostrar $0 real.
+  if (discoveryRes.status === "rejected") {
+    warnings.push(
+      `Windsor.ai (Google Ads, anuncios): no se pudo consultar el histórico ampliado para descubrir anuncios sin actividad. Detalle: ${reasonMessage(discoveryRes)}`
+    );
+  } else {
+    for (const row of discoveryRes.value) {
       const acc = getOrCreate(byAd, row);
       if (acc) acc.hasCore = true;
     }
-  } catch (err: any) {
-    warnings.push(
-      `Windsor.ai (Google Ads, anuncios): no se pudo consultar el histórico ampliado para descubrir anuncios sin actividad. Detalle: ${err?.message || err}`
-    );
   }
 
   // Miniatura del creativo — capa aparte por el conflicto de recurso VIDEO
   // (ver nota al principio del archivo). No fatal: si falla, los anuncios
   // igual se muestran, solo sin miniatura (la UI ya contempla ese caso).
-  try {
-    const discovery = discoveryWindowFor(range);
-    const rows = await fetchLayer(VIDEO_FIELDS, discovery.dateFrom, discovery.dateTo);
-    for (const row of rows) {
+  if (videoRes.status === "rejected") {
+    warnings.push(
+      `Windsor.ai (Google Ads, anuncios): no se pudo traer la miniatura de los anuncios de video. Detalle: ${reasonMessage(videoRes)}`
+    );
+  } else {
+    for (const row of videoRes.value) {
       const acc = getOrCreate(byAd, row);
       if (!acc) continue;
       const videoId = row.video_id ? String(row.video_id) : "";
@@ -190,10 +173,6 @@ export async function fetchGoogleAdsAds(rangeKey: DateRangeKey = "month"): Promi
         acc.youtubeVideoId = videoId;
       }
     }
-  } catch (err: any) {
-    warnings.push(
-      `Windsor.ai (Google Ads, anuncios): no se pudo traer la miniatura de los anuncios de video. Detalle: ${err?.message || err}`
-    );
   }
 
   if (byAd.size === 0) {

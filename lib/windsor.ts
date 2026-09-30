@@ -1,5 +1,6 @@
 import type { ClientData, PlatformKey } from "./types";
 import { fetchMediaPlanBudgetByAccount } from "./mediaPlan";
+import { fetchWindsorRows } from "./windsorFetch";
 
 /**
  * Integración con Windsor.ai — API REST (`connectors.windsor.ai`), la capa de
@@ -205,22 +206,9 @@ interface AccountTotals {
   conversions: number;
 }
 
-async function fetchRows(connector: string, dateFrom: string, dateTo: string, fields: string): Promise<any[]> {
-  const params = new URLSearchParams({ api_key: process.env.WINDSOR_API_KEY!, fields, date_from: dateFrom, date_to: dateTo });
-  const res = await fetch(`${WINDSOR_BASE_URL}/${connector}?${params.toString()}`, {
-    // Nunca cachear: cada request de /api/spend debe reflejar el gasto actual.
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`HTTP ${res.status} — ${text.slice(0, 200)}`);
-  }
-  const json = await res.json();
-  const rows = Array.isArray(json) ? json : json?.data;
-  if (!Array.isArray(rows)) {
-    throw new Error("Respuesta inesperada de Windsor.ai (ni array ni { data: [...] })");
-  }
-  return rows;
+// Timeout, reintento y límite de concurrencia: ver lib/windsorFetch.ts.
+function fetchRows(connector: string, dateFrom: string, dateTo: string, fields: string): Promise<any[]> {
+  return fetchWindsorRows(connector, fields, dateFrom, dateTo);
 }
 
 /**
@@ -238,11 +226,24 @@ async function discoverPlatformAccounts(
 
   const byAccount = new Map<string, AccountTotals>();
 
+  // Las 3 capas son independientes: se piden en paralelo (el tiempo total es
+  // el de la más lenta, no la suma) y después se aplican en el mismo orden de
+  // siempre — la capa 1 tiene prioridad sobre el nombre/total de una cuenta.
+  // El .catch vacío solo evita un unhandledRejection mientras se espera a otra
+  // capa; cada `await` de abajo sigue tirando el error normalmente.
+  const rangeP = fetchRows(connector, metricRange.dateFrom, metricRange.dateTo, "account_id,account_name,date,spend,conversions");
+  const historyP = fetchRows(connector, discovery.dateFrom, discovery.dateTo, "account_id,account_name");
+  const accountsP = fetch(
+    `https://onboard.windsor.ai/api/common/ds-accounts?datasource=${connector}&api_key=${process.env.WINDSOR_API_KEY}`,
+    { cache: "no-store", signal: AbortSignal.timeout(15000) }
+  );
+  for (const p of [rangeP, historyP, accountsP]) p.catch(() => {});
+
   // Capa 1: el rango elegido en el selector de fecha (por defecto, mes en
   // curso), spend y conversiones reales.
   let rangeRows: any[] = [];
   try {
-    rangeRows = await fetchRows(connector, metricRange.dateFrom, metricRange.dateTo, "account_id,account_name,date,spend,conversions");
+    rangeRows = await rangeP;
     for (const row of rangeRows) {
       const accountId = String(row.account_id ?? "");
       if (!accountId) continue;
@@ -260,7 +261,7 @@ async function discoverPlatformAccounts(
   // discoveryWindowFor) — para cuentas sin actividad en ese período (Windsor
   // no manda una fila con spend "0", omite la cuenta directamente).
   try {
-    const historyRows = await fetchRows(connector, discovery.dateFrom, discovery.dateTo, "account_id,account_name");
+    const historyRows = await historyP;
     for (const row of historyRows) {
       const accountId = String(row.account_id ?? "");
       if (!accountId || byAccount.has(accountId)) continue;
@@ -273,8 +274,7 @@ async function discoverPlatformAccounts(
   // Capa 3: endpoint de cuentas conectadas (metadata, no datos de campaña) —
   // para cuentas que nunca tuvieron ni un solo evento.
   try {
-    const url = `https://onboard.windsor.ai/api/common/ds-accounts?datasource=${connector}&api_key=${process.env.WINDSOR_API_KEY}`;
-    const res = await fetch(url, { cache: "no-store" });
+    const res = await accountsP;
     if (res.ok) {
       const json = await res.json();
       const list = Array.isArray(json) ? json : json?.data ?? json?.accounts;
@@ -326,15 +326,18 @@ export async function fetchWindsorSpend(
   // de la hoja maestra de proyectados vía el connector "googlesheets" de
   // Windsor (ver lib/mediaPlan.ts). Se pide una sola vez, no por plataforma:
   // la hoja mezcla las 3 en las mismas filas.
-  const { byAccount: budgetByAccount, warning: mediaPlanWarning } = await fetchMediaPlanBudgetByAccount();
+  const [{ byAccount: budgetByAccount, warning: mediaPlanWarning }, ...discovered] = await Promise.all([
+    fetchMediaPlanBudgetByAccount(),
+    ...PLATFORM_SOURCES.map((source) => discoverPlatformAccounts(source, warnings, metricRange)),
+  ]);
   if (mediaPlanWarning) warnings.push(mediaPlanWarning);
 
   const usedByMock = new Set<string>(); // "platformKey:accountId" ya aplicado a un mock client
   let updatedMockClients: ClientData[] = baseClients;
   const allRealClients: ClientData[] = [];
 
-  for (const source of PLATFORM_SOURCES) {
-    const byAccount = await discoverPlatformAccounts(source, warnings, metricRange);
+  for (const [i, source] of PLATFORM_SOURCES.entries()) {
+    const byAccount = discovered[i];
     const accountMap = parseAccountMap(source.accountMapEnvVar);
 
     updatedMockClients = updatedMockClients.map((c) => {
@@ -389,6 +392,12 @@ export async function fetchWindsorSpend(
   // en ninguna plataforma, o todas las consultas fallaron), se sigue
   // mostrando el mock completo — nunca una tabla vacía.
   if (allRealClients.length === 0 && usedByMock.size === 0) {
+    // Con warnings, Windsor falló (no es que no haya cuentas conectadas):
+    // devolver el mock acá mostraba clientes ficticios marcados como reales.
+    // Se tira para que la ruta sirva el último dato bueno o un error claro.
+    if (warnings.length > 0) {
+      throw new Error(`No se pudo obtener ninguna cuenta desde Windsor.ai. ${warnings.slice(0, 3).join(" | ")}`);
+    }
     return { clients: baseClients, warnings };
   }
   const overriddenMockClients = updatedMockClients.filter((c) =>
@@ -420,8 +429,9 @@ export async function fetchPlatformComparison(
   const warnings: string[] = [];
   const platforms: PlatformTotals[] = [];
 
-  for (const source of PLATFORM_SOURCES) {
-    const byAccount = await discoverPlatformAccounts(source, warnings, metricRange);
+  const discovered = await Promise.all(PLATFORM_SOURCES.map((source) => discoverPlatformAccounts(source, warnings, metricRange)));
+  for (const [i, source] of PLATFORM_SOURCES.entries()) {
+    const byAccount = discovered[i];
     let spend = 0;
     let conversions = 0;
     for (const acc of byAccount.values()) {
@@ -436,6 +446,10 @@ export async function fetchPlatformComparison(
       cpl: conversions > 0 ? spend / conversions : 0,
       accountCount: byAccount.size,
     });
+  }
+
+  if (platforms.every((p) => p.accountCount === 0) && warnings.length > 0) {
+    throw new Error(`No se pudo obtener ninguna cuenta desde Windsor.ai. ${warnings.slice(0, 3).join(" | ")}`);
   }
 
   return { platforms, warnings };

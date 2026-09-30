@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchJson } from "@/lib/clientFetch";
 import { useEffect, useRef, useState } from "react";
 import type { CampaignRow, CampaignsResponse, PlatformKey } from "@/lib/types";
 
@@ -149,11 +150,7 @@ export default function MediosView() {
     const keys = enabledKeysDep.split(",").filter(Boolean) as PlatformKey[];
     Promise.all(
       keys.map((key) =>
-        fetch(`/api/campaigns?platform=${key}&range=${range}`)
-          .then((r) => {
-            if (!r.ok) throw new Error("HTTP " + r.status);
-            return r.json();
-          })
+        fetchJson<any>(`/api/campaigns?platform=${key}&range=${range}`)
           .then((body: CampaignsResponse) => [key, body] as const)
       )
     )
@@ -183,7 +180,16 @@ export default function MediosView() {
   if (error) {
     return (
       <div className="wrap">
-        <div className="loading-state">No se pudo cargar /api/campaigns: {error}</div>
+        <div className="loading-state">
+          No se pudo cargar /api/campaigns: {error}{" "}
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            style={{ marginLeft: 8, fontWeight: 600, color: "var(--accent)", cursor: "pointer" }}
+          >
+            Reintentar
+          </button>
+        </div>
       </div>
     );
   }

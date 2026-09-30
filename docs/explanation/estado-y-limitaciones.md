@@ -31,3 +31,12 @@ El gráfico de "Ritmo de consumo" muestra una curva de gasto acumulado día a d�
 ## Por qué no hay autenticación todavía
 
 El dashboard no tiene login — cualquiera con la URL de producción puede verlo. Esto es aceptable mientras el uso sea interno del equipo de Ignite (ver [prioridad confirmada](./arquitectura-de-datos.md#prioridad-confirmada)), pero deja de serlo en cuanto haya datos reales de clientes reales visibles ahí. La autenticación (Supabase Auth) está deliberadamente pospuesta a la fase de multiusuario, no olvidada.
+
+## Cómo se comporta ante una falla de Windsor.ai (2026-09-30)
+
+Antes, cualquier falla de Windsor (timeout, HTTP 5xx) hacía que las rutas `/api/*` respondieran **datos de ejemplo marcados como reales** — el caso que se vio en producción: Anuncios de Meta mostrando "META AD 1" placeholders. Ahora, con `WINDSOR_API_KEY` configurada:
+
+- **Nunca se muestra mock en lugar de datos reales.** Si Windsor falla y no hay un dato previo, la ruta responde **HTTP 502** con `{ "error": "..." }` y la pantalla muestra el motivo y un botón **Reintentar**. Sin `WINDSOR_API_KEY` (desarrollo local) el mock sigue siendo el comportamiento documentado; LinkedIn sigue siendo mock rotulado.
+- **Caché en memoria por ruta** (`lib/cache.ts`): 5 min de frescura. Solo se guardan resultados completos. Si una consulta nueva falla o viene parcial y hay un resultado completo de hasta 6 h, se sirve ese con un aviso "Mostrando datos de hace N min". Consultas simultáneas idénticas comparten una sola llamada a Windsor. Es **por instancia de Vercel** (se pierde en un cold start) — no reemplaza el histórico persistente en Supabase del backlog.
+- **Capas en paralelo** y cliente único a Windsor (`lib/windsorFetch.ts`): timeout de 20 s por consulta, un reintento ante 429/5xx/red (no ante timeout), máximo 8 consultas simultáneas por instancia. Las rutas declaran `maxDuration = 30`.
+- **Límite conocido:** un resultado *parcial* sin historial previo (p. ej. venció la capa de descubrimiento) se muestra igual, con su warning y sin cachear — los anuncios/cuentas sin actividad pueden faltar hasta el siguiente intento.

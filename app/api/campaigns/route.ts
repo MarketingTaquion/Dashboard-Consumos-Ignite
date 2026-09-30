@@ -4,10 +4,13 @@ import { fetchMetaCampaigns } from "@/lib/windsorMeta";
 import { fetchTiktokCampaigns } from "@/lib/windsorTiktok";
 import { hasWindsorCredentials, resolveDateRange, DATE_RANGE_KEYS, type DateRangeKey, type ResolvedDateRange } from "@/lib/windsor";
 import { fetchMediaPlanBudgetByCampaign } from "@/lib/mediaPlan";
+import { cachedWithFallback, hasDegradedWarning, staleWarning, CACHE_FRESH_MS, CACHE_MAX_STALE_MS } from "@/lib/cache";
 import { MOCK_CAMPAIGNS } from "@/lib/mockCampaigns";
 import type { CampaignRow, CampaignsResponse, PlatformKey } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+// Ver app/api/ads/route.ts: las consultas lentas de Windsor necesitan más de 10s.
+export const maxDuration = 30;
 
 // Todas las plataformas que el selector de la vista Medios puede pedir —
 // distinto de "cuáles ya tienen fetcher real" (eso se resuelve más abajo).
@@ -20,7 +23,13 @@ const ALL_PLATFORM_KEYS: PlatformKey[] = ["google", "meta", "tiktok", "linkedin"
 // De esas, cuáles ya tienen fetcher de campañas contra Windsor.ai real.
 const CONNECTED_PLATFORMS: PlatformKey[] = ["google", "meta", "tiktok"];
 
-function fetchCampaignsForPlatform(platform: PlatformKey, rangeKey: DateRangeKey): Promise<{ campaigns: CampaignRow[]; warnings: string[] }> {
+interface CampaignsResult {
+  campaigns: CampaignRow[];
+  warnings: string[];
+  failed?: boolean;
+}
+
+function fetchCampaignsForPlatform(platform: PlatformKey, rangeKey: DateRangeKey): Promise<CampaignsResult> {
   switch (platform) {
     case "google":
       return fetchGoogleAdsCampaigns(rangeKey);
@@ -80,38 +89,49 @@ export async function GET(request: Request) {
     return NextResponse.json(body);
   }
 
+  // Con credenciales, un fallo de Windsor NUNCA se disfraza de mock: o se
+  // sirve el último resultado bueno (con aviso) o se responde un error claro.
   try {
-    // Presupuesto proyectado por campaña (hoja madre) en paralelo — cruce
-    // aparte de los datos de Windsor, no vive en los fetchers de campaña
-    // (esos son solo de Windsor). Mismo mecanismo que ya usa
-    // lib/financeCampaigns.ts para Finanzas.
-    const [{ campaigns, warnings }, budgets] = await Promise.all([
-      fetchCampaignsForPlatform(platform, rangeKey),
-      fetchMediaPlanBudgetByCampaign(),
-    ]);
-    const campaignsWithBudget: CampaignRow[] = campaigns.map((c) => ({
-      ...c,
-      budget: budgets.byCampaign.get(`${c.accountId}:${c.campaignName}`) ?? 0,
-    }));
-    const allWarnings = budgets.warning ? [...warnings, budgets.warning] : warnings;
+    const result = await cachedWithFallback<CampaignsResult>({
+      key: `campaigns:${platform}:${rangeKey}`,
+      freshMs: CACHE_FRESH_MS,
+      maxStaleMs: CACHE_MAX_STALE_MS,
+      load: async () => {
+        // Presupuesto proyectado por campaña (hoja madre) en paralelo — cruce
+        // aparte de los datos de Windsor, no vive en los fetchers de campaña
+        // (esos son solo de Windsor). Mismo mecanismo que ya usa
+        // lib/financeCampaigns.ts para Finanzas.
+        const [{ campaigns, warnings, failed }, budgets] = await Promise.all([
+          fetchCampaignsForPlatform(platform, rangeKey),
+          fetchMediaPlanBudgetByCampaign(),
+        ]);
+        if (failed) throw new Error(warnings.join(" | ") || "Windsor.ai no respondió");
+        return {
+          campaigns: campaigns.map((c) => ({
+            ...c,
+            budget: budgets.byCampaign.get(`${c.accountId}:${c.campaignName}`) ?? 0,
+          })),
+          warnings: budgets.warning ? [...warnings, budgets.warning] : warnings,
+        };
+      },
+      isClean: (r) => r.campaigns.length > 0 && !hasDegradedWarning(r.warnings),
+      describe: (r) => r.warnings.join(" | "),
+    });
+
+    const warnings = result.stale ? [staleWarning(result.ageMs, result.refreshError)] : result.value.warnings;
     const body: CampaignsResponse = {
-      source: campaignsWithBudget.length > 0 ? "windsor" : "mock",
+      source: "windsor",
       platform,
-      campaigns: campaignsWithBudget.length > 0 ? campaignsWithBudget : MOCK_CAMPAIGNS[platform] ?? [],
-      warnings: allWarnings.length ? allWarnings : undefined,
+      campaigns: result.value.campaigns,
+      warnings: warnings.length ? warnings : undefined,
       today: range.today,
       daysInPeriod: range.daysInPeriod,
     };
     return NextResponse.json(body);
   } catch (err: any) {
-    const body: CampaignsResponse = {
-      source: "mock",
-      platform,
-      campaigns: MOCK_CAMPAIGNS[platform] ?? [],
-      warnings: [`Error inesperado consultando campañas, se usó mock: ${err?.message || err}`],
-      today: range.today,
-      daysInPeriod: range.daysInPeriod,
-    };
-    return NextResponse.json(body);
+    return NextResponse.json(
+      { error: `No se pudieron obtener las campañas de ${platform} desde Windsor.ai. ${err?.message || err}` },
+      { status: 502, headers: { "Cache-Control": "no-store" } }
+    );
   }
 }
