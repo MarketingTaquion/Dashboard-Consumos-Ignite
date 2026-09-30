@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchJson } from "@/lib/clientFetch";
 import { useEffect, useRef, useState } from "react";
 import type { AdRow, AdsResponse, PlatformKey } from "@/lib/types";
 
@@ -170,7 +171,7 @@ export default function AnunciosView() {
     setError(null);
     setBrokenThumbs(new Set());
     const range = datePreset === "custom" ? "month" : datePreset;
-    // Timeout del lado del cliente — verificado en vivo 2026-09-21: la
+    // Timeout del lado del cliente (35s, por encima del maxDuration de 30s de la ruta) — verificado en vivo 2026-09-21: la
     // consulta de anuncios de Meta se quedó colgada en "Cargando
     // anuncios…" indefinidamente. El fetch server-side ya tiene su propio
     // timeout (ver lib/windsorAdsMeta.ts), pero esto asegura que la UI
@@ -183,16 +184,12 @@ export default function AnunciosView() {
     const timeout = setTimeout(() => {
       timedOut = true;
       controller.abort();
-    }, 20000);
-    fetch(`/api/ads?platform=${platform}&range=${range}`, { signal: controller.signal })
-      .then((r) => {
-        if (!r.ok) throw new Error("HTTP " + r.status);
-        return r.json();
-      })
+    }, 35000);
+    fetchJson<any>(`/api/ads?platform=${platform}&range=${range}`, { signal: controller.signal })
       .then((body: AdsResponse) => setData(body))
       .catch((err) => {
         if (err?.name === "AbortError") {
-          if (timedOut) setError("La consulta tardó demasiado (más de 20s) y se canceló. Probá de nuevo.");
+          if (timedOut) setError("La consulta tardó demasiado (más de 35s) y se canceló. Probá de nuevo.");
         } else {
           setError(String(err?.message || err));
         }
@@ -204,7 +201,16 @@ export default function AnunciosView() {
   if (error) {
     return (
       <div className="wrap">
-        <div className="loading-state">No se pudo cargar /api/ads: {error}</div>
+        <div className="loading-state">
+          No se pudo cargar /api/ads: {error}{" "}
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            style={{ marginLeft: 8, fontWeight: 600, color: "var(--accent)", cursor: "pointer" }}
+          >
+            Reintentar
+          </button>
+        </div>
       </div>
     );
   }

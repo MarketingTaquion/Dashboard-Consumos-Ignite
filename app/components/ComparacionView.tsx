@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchJson } from "@/lib/clientFetch";
 import { useEffect, useRef, useState } from "react";
 import type { PlatformComparisonResponse, PlatformKey } from "@/lib/types";
 
@@ -51,11 +52,7 @@ export default function ComparacionView() {
   useEffect(() => {
     setData(null);
     const range = datePreset === "custom" ? "month" : datePreset;
-    fetch(`/api/platform-comparison?range=${range}`)
-      .then((r) => {
-        if (!r.ok) throw new Error("HTTP " + r.status);
-        return r.json();
-      })
+    fetchJson<any>(`/api/platform-comparison?range=${range}`)
       .then((body: PlatformComparisonResponse) => setData(body))
       .catch((err) => setError(String(err?.message || err)));
   }, [datePreset]);
@@ -63,7 +60,16 @@ export default function ComparacionView() {
   if (error) {
     return (
       <div className="wrap">
-        <div className="loading-state">No se pudo cargar /api/platform-comparison: {error}</div>
+        <div className="loading-state">
+          No se pudo cargar /api/platform-comparison: {error}{" "}
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            style={{ marginLeft: 8, fontWeight: 600, color: "var(--accent)", cursor: "pointer" }}
+          >
+            Reintentar
+          </button>
+        </div>
       </div>
     );
   }

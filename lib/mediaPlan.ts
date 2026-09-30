@@ -115,7 +115,7 @@ export async function fetchMediaPlanTargets(): Promise<{ targets: MediaPlanTarge
         fields: `cliente,plataforma,mes,cuenta,${field},presupuesto_proyectado`,
         ...dateParams,
       });
-      const res = await fetch(`${WINDSOR_BASE_URL}/${SHEETS_CONNECTOR}?${params.toString()}`, { cache: "no-store" });
+      const res = await fetch(`${WINDSOR_BASE_URL}/${SHEETS_CONNECTOR}?${params.toString()}`, { cache: "no-store", signal: AbortSignal.timeout(15000) });
       if (res.ok) {
         const json = await res.json();
         const r = Array.isArray(json) ? json : json?.data;

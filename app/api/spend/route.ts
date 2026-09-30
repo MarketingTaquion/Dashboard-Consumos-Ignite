@@ -3,9 +3,12 @@ import { MOCK_CLIENTS, MOCK_TODAY, MOCK_DAYS_IN_MONTH } from "@/lib/mockData";
 import { fetchGoogleAdsSpend, hasGoogleAdsCredentials } from "@/lib/googleAds";
 import { fetchWindsorSpend, hasWindsorCredentials, resolveDateRange, DATE_RANGE_KEYS, type DateRangeKey } from "@/lib/windsor";
 import { fetchCampaignsByAccount } from "@/lib/financeCampaigns";
+import { cachedWithFallback, hasDegradedWarning, staleWarning, CACHE_FRESH_MS, CACHE_MAX_STALE_MS } from "@/lib/cache";
 import type { SpendResponse } from "@/lib/types";
 
-export const dynamic = "force-dynamic"; // siempre recalcular, nunca cachear una respuesta vieja
+export const dynamic = "force-dynamic"; // la caché es la de lib/cache.ts (explícita, con TTL), no la del framework
+// Ver app/api/ads/route.ts: las consultas lentas de Windsor necesitan más de 10s.
+export const maxDuration = 30;
 
 function mockResponse(warnings?: string[]): SpendResponse {
   return {
@@ -26,34 +29,47 @@ export async function GET(request: Request) {
   // Prioridad: Windsor.ai (capa de ingesta elegida, ver
   // docs/explanation/arquitectura-de-datos.md) > Google Ads API directo
   // (paso intermedio, ver lib/googleAds.ts) > mock. Cada nivel cae al
-  // siguiente si falta configuración o si la consulta real tira una
-  // excepción no controlada — /api/spend nunca devuelve un error al cliente.
+  // siguiente solo si FALTA configuración. Con Windsor configurado, una falla
+  // en la consulta ya no cae a mock: se sirve el último dato bueno o se
+  // responde 502 (ver docs/explanation/estado-y-limitaciones.md).
   const rangeKey = parseRangeParam(request);
 
   if (hasWindsorCredentials()) {
+    // Con credenciales, un fallo de Windsor NUNCA se disfraza de clientes
+    // ficticios: o se sirve el último resultado bueno (con aviso) o se
+    // responde un error claro.
     try {
       const range = resolveDateRange(rangeKey);
-      // Cuentas (presupuesto/real ya existentes) + desglose por campaña
-      // (lib/financeCampaigns.ts, a pedido explícito del usuario) en
-      // paralelo — son 2 fuentes independientes que se mezclan acá, no una
-      // depende de la otra.
-      const [{ clients, warnings: spendWarnings }, { byAccount: campaignsByAccount, warnings: campaignWarnings }] =
-        await Promise.all([fetchWindsorSpend(MOCK_CLIENTS, range), fetchCampaignsByAccount(rangeKey)]);
-      const clientsWithCampaigns = clients.map((c) =>
-        c.accountId ? { ...c, campaigns: campaignsByAccount.get(c.accountId) ?? [] } : c
-      );
-      const warnings = [...spendWarnings, ...campaignWarnings];
-      const body: SpendResponse = {
-        source: "windsor",
-        today: range.today,
-        daysInMonth: range.daysInPeriod,
-        clients: clientsWithCampaigns,
-        warnings: warnings.length ? warnings : undefined,
-      };
-      return NextResponse.json(body);
+      const result = await cachedWithFallback<SpendResponse>({
+        key: `spend:${rangeKey}`,
+        freshMs: CACHE_FRESH_MS,
+        maxStaleMs: CACHE_MAX_STALE_MS,
+        load: async () => {
+          // Cuentas (presupuesto/real ya existentes) + desglose por campaña
+          // (lib/financeCampaigns.ts, a pedido explícito del usuario) en
+          // paralelo — son 2 fuentes independientes que se mezclan acá, no
+          // una depende de la otra.
+          const [{ clients, warnings: spendWarnings }, { byAccount: campaignsByAccount, warnings: campaignWarnings }] =
+            await Promise.all([fetchWindsorSpend(MOCK_CLIENTS, range), fetchCampaignsByAccount(rangeKey)]);
+          const warnings = [...spendWarnings, ...campaignWarnings];
+          return {
+            source: "windsor",
+            today: range.today,
+            daysInMonth: range.daysInPeriod,
+            clients: clients.map((c) => (c.accountId ? { ...c, campaigns: campaignsByAccount.get(c.accountId) ?? [] } : c)),
+            warnings: warnings.length ? warnings : undefined,
+          } satisfies SpendResponse;
+        },
+        isClean: (r) => r.clients.length > 0 && !hasDegradedWarning(r.warnings),
+        describe: (r) => (r.warnings ?? []).join(" | "),
+      });
+
+      if (!result.stale) return NextResponse.json(result.value);
+      return NextResponse.json({ ...result.value, warnings: [staleWarning(result.ageMs, result.refreshError)] });
     } catch (err: any) {
       return NextResponse.json(
-        mockResponse([`Error inesperado consultando Windsor.ai, se usó mock: ${err?.message || err}`])
+        { error: `No se pudo obtener el consumo desde Windsor.ai. ${err?.message || err}` },
+        { status: 502, headers: { "Cache-Control": "no-store" } }
       );
     }
   }

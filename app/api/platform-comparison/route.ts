@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { fetchPlatformComparison, hasWindsorCredentials, resolveDateRange, DATE_RANGE_KEYS, type DateRangeKey } from "@/lib/windsor";
+import { cachedWithFallback, hasDegradedWarning, staleWarning, CACHE_FRESH_MS, CACHE_MAX_STALE_MS } from "@/lib/cache";
 import type { PlatformComparisonResponse } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+// Ver app/api/ads/route.ts: las consultas lentas de Windsor necesitan más de 10s.
+export const maxDuration = 30;
 
 function parseRangeParam(request: Request): DateRangeKey {
   const raw = new URL(request.url).searchParams.get("range");
@@ -25,11 +28,24 @@ export async function GET(request: Request) {
     return NextResponse.json(body);
   }
 
+  // Con credenciales, un fallo de Windsor NUNCA se disfraza de mock: o se
+  // sirve el último resultado bueno (con aviso) o se responde un error claro.
   try {
-    const { platforms, warnings } = await fetchPlatformComparison(resolveDateRange(rangeKey));
+    const result = await cachedWithFallback<Awaited<ReturnType<typeof fetchPlatformComparison>>>({
+      key: `platform-comparison:${rangeKey}`,
+      freshMs: CACHE_FRESH_MS,
+      maxStaleMs: CACHE_MAX_STALE_MS,
+      load: () => fetchPlatformComparison(resolveDateRange(rangeKey)),
+      isClean: (r) => r.platforms.some((p) => p.accountCount > 0) && !hasDegradedWarning(r.warnings),
+      describe: (r) => r.warnings.join(" | "),
+    });
+
+    const { platforms, warnings: fetchWarnings } = result.value;
+    const warnings = result.stale ? [staleWarning(result.ageMs, result.refreshError)] : fetchWarnings;
     // Real en cuanto se encontró al menos una cuenta en alguna plataforma —
     // el gasto/conversiones de cada una se muestran tal cual, $0 incluido,
     // sin caer a mock por plataforma individual (ver lib/windsor.ts).
+    // Sin ninguna cuenta y sin warnings = Windsor no tiene nada conectado.
     const hasAnyAccount = platforms.some((p) => p.accountCount > 0);
     const body: PlatformComparisonResponse = {
       source: hasAnyAccount ? "windsor" : "mock",
@@ -38,11 +54,9 @@ export async function GET(request: Request) {
     };
     return NextResponse.json(body);
   } catch (err: any) {
-    const body: PlatformComparisonResponse = {
-      source: "mock",
-      platforms: MOCK_PLATFORMS,
-      warnings: [`Error inesperado consultando comparación de plataformas, se usó mock: ${err?.message || err}`],
-    };
-    return NextResponse.json(body);
+    return NextResponse.json(
+      { error: `No se pudo obtener la comparación de plataformas desde Windsor.ai. ${err?.message || err}` },
+      { status: 502, headers: { "Cache-Control": "no-store" } }
+    );
   }
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchJson } from "@/lib/clientFetch";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { ClientData, FinanceCampaignRow, PlatformKey, SpendResponse } from "@/lib/types";
 
@@ -194,11 +195,7 @@ export default function Dashboard() {
     // "custom" todavía no está conectado (ver nota en el menú de fecha) — se
     // sigue pidiendo "month" hasta que se implemente el rango personalizado.
     const range = datePreset === "custom" ? "month" : datePreset;
-    fetch(`/api/spend?range=${range}`)
-      .then((r) => {
-        if (!r.ok) throw new Error("HTTP " + r.status);
-        return r.json();
-      })
+    fetchJson<any>(`/api/spend?range=${range}`)
       .then((body: SpendResponse) => setData(body))
       .catch((err) => setError(String(err?.message || err)));
   }, [datePreset]);
@@ -266,7 +263,16 @@ export default function Dashboard() {
   if (error) {
     return (
       <div className="wrap">
-        <div className="loading-state">No se pudo cargar /api/spend: {error}</div>
+        <div className="loading-state">
+          No se pudo cargar /api/spend: {error}{" "}
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            style={{ marginLeft: 8, fontWeight: 600, color: "var(--accent)", cursor: "pointer" }}
+          >
+            Reintentar
+          </button>
+        </div>
       </div>
     );
   }
