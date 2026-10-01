@@ -139,6 +139,10 @@ export interface AdRow {
   // el primero, este campo es la cantidad total para que la UI avise
   // "+N variantes" en vez de mostrar un solo video en silencio.
   videoVariantCount?: number;
+  // Seguidores ganados atribuidos al anuncio en el período (Meta: seguidores
+  // de Instagram + likes de página; TikTok: "paid follows"). undefined = la
+  // plataforma no lo expone (Google) o la capa falló — nunca se fabrica un 0.
+  followers?: number;
 }
 
 export interface AdsResponse {
