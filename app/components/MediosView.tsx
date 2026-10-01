@@ -82,14 +82,34 @@ function statusForBudgetSpend(budget: number, spend: number, today: number, days
 // recomendar), o el período ya cerró (today >= daysInPeriod — rangos fijos
 // como "Hoy"/"Ayer"/"7d"/"Mes anterior" siempre están 100% transcurridos,
 // solo "Este mes" tiene días remanentes de verdad).
+// Se muestra como el monto LITERAL por día (ej. "$4.000 x día") más, entre
+// paréntesis, cuánto se aleja del ritmo actual — a pedido del equipo
+// 2026-10-01: antes se veía como "+$4.000" en verde, que se leía como "poné
+// $4.000 más por día" en vez de "el presupuesto diario es $4.000".
 function dailyRecommended(budget: number, spend: number, today: number, daysInPeriod: number): number | undefined {
   if (budget === 0) return undefined;
   const daysRemaining = daysInPeriod - today;
   if (daysRemaining <= 0) return undefined;
   return (budget - spend) / daysRemaining;
 }
-function fmtDailySigned(n: number): string {
-  return (n >= 0 ? "+" : "") + fmtMoney(n);
+// Cuánto cambia el presupuesto diario recomendado contra el ritmo promedio
+// actual (gasto acumulado / días transcurridos), en %. Positivo = hay que
+// subir el gasto diario para llegar al presupuesto; negativo = hay que
+// bajarlo. undefined si no hay un ritmo actual contra el cual comparar, o si
+// pasaron menos de MIN_DAYS_FOR_PCT días del período: con 1 o 2 días de gasto
+// el promedio es ruido y el % sale desproporcionado (ej. +9701% el día 1).
+const MIN_DAYS_FOR_PCT = 3;
+// ¿Hay que subir el gasto diario? Recomendado > ritmo promedio actual (0 si
+// todavía no se gastó nada). A diferencia del %, no se oculta antes del día
+// 3: la dirección es válida desde el primer día, solo la magnitud es ruido.
+// Se usa para pintar el monto de verde ("hay que aumentar presupuesto").
+function needsIncrease(daily: number, spend: number, today: number): boolean {
+  const current = today > 0 ? spend / today : 0;
+  return daily > current;
+}
+function dailyVsCurrentPct(daily: number, spend: number, today: number): number | undefined {
+  if (daily <= 0 || spend <= 0 || today < MIN_DAYS_FOR_PCT) return undefined;
+  return (daily / (spend / today) - 1) * 100;
 }
 
 // Fila de campaña ya combinada entre plataformas — CampaignRow + de qué
@@ -390,7 +410,7 @@ export default function MediosView() {
                   <th className="num">Real</th>
                   <th className="num">Remanente</th>
                   <th>Estado</th>
-                  <th className="num">Presup. diario recom.</th>
+                  <th className="num" title="Remanente ÷ días que quedan. Entre paréntesis: variación contra el ritmo promedio de gasto actual (+ = hay que subir, − = hay que bajar).">Presup. diario recom.</th>
                   <th className="num">Impr.</th>
                   <th className="num">Clicks</th>
                   <th className="num">CPM</th>
@@ -435,6 +455,8 @@ export default function MediosView() {
                 ) : (
                   campaignsIncluded.map((c) => {
                     const daily = dailyRecommended(c.budget, c.spend, today, daysInPeriod);
+                    const pctVsNow = daily === undefined ? undefined : dailyVsCurrentPct(daily, c.spend, today);
+                    const increase = daily !== undefined && daily > 0 && needsIncrease(daily, c.spend, today);
                     const remaining = c.budget - c.spend;
                     const cst = statusForBudgetSpend(c.budget, c.spend, today, daysInPeriod);
                     const platMeta = PLATFORMS.find((p) => p.key === c.platform);
@@ -460,8 +482,23 @@ export default function MediosView() {
                           {cst.label}
                         </span>
                       </td>
-                      <td className="num" style={daily === undefined ? undefined : { color: daily < 0 ? "var(--delta-bad-text)" : "var(--delta-good-text)" }}>
-                        {daily === undefined ? "—" : fmtDailySigned(daily)}
+                      <td className="num">
+                        {daily === undefined ? (
+                          "—"
+                        ) : daily <= 0 ? (
+                          <span style={{ color: "var(--delta-bad-text)" }}>Presupuesto agotado</span>
+                        ) : (
+                          <>
+                            <span style={increase ? { color: "var(--delta-good-text)" } : undefined}>{fmtMoney(daily)} x día</span>
+                            {pctVsNow !== undefined && (
+                              <span style={{ color: "var(--text-muted)" }}>
+                                {" "}
+                                ({pctVsNow >= 0 ? "+" : "−"}
+                                {Math.abs(pctVsNow).toFixed(0)}%)
+                              </span>
+                            )}
+                          </>
+                        )}
                       </td>
                       <td className="num">{fmtInt(c.impressions)}</td>
                       <td className="num">{fmtInt(c.clicks)}</td>
