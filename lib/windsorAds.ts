@@ -1,5 +1,5 @@
 import type { AdRow } from "./types";
-import { fetchWindsorRows, reasonMessage } from "./windsorFetch";
+import { fetchWindsorRows, reasonMessage, type FetchAdsOptions } from "./windsorFetch";
 import { resolveDateRange, discoveryWindowFor, type DateRangeKey } from "./windsor";
 
 /**
@@ -108,7 +108,7 @@ function fetchLayer(fields: string, dateFrom: string, dateTo: string): Promise<a
   return fetchWindsorRows(CONNECTOR, fields, dateFrom, dateTo);
 }
 
-export async function fetchGoogleAdsAds(rangeKey: DateRangeKey = "month"): Promise<{ ads: AdRow[]; warnings: string[]; failed?: boolean }> {
+export async function fetchGoogleAdsAds(rangeKey: DateRangeKey = "month", opts: FetchAdsOptions = {}): Promise<{ ads: AdRow[]; warnings: string[]; failed?: boolean }> {
   const warnings: string[] = [];
   if (!process.env.WINDSOR_API_KEY) return { ads: [], warnings };
 
@@ -121,8 +121,8 @@ export async function fetchGoogleAdsAds(rangeKey: DateRangeKey = "month"): Promi
   const discovery = discoveryWindowFor(range);
   const [coreRes, discoveryRes, videoRes] = await Promise.allSettled([
     fetchLayer(CORE_FIELDS, range.dateFrom, range.dateTo),
-    fetchLayer(DISCOVERY_FIELDS, discovery.dateFrom, discovery.dateTo),
-    fetchLayer(VIDEO_FIELDS, discovery.dateFrom, discovery.dateTo),
+    opts.skipDiscovery ? Promise.resolve<any[]>([]) : fetchLayer(DISCOVERY_FIELDS, discovery.dateFrom, discovery.dateTo),
+    opts.skipDiscovery ? Promise.resolve<any[]>([]) : fetchLayer(VIDEO_FIELDS, discovery.dateFrom, discovery.dateTo),
   ]);
 
   // Capa 1 — núcleo. Si esta falla, no hay nada que mostrar: se corta acá.

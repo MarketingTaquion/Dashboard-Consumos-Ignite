@@ -39,6 +39,10 @@ function isAuthorized(request: Request): boolean | "unconfigured" {
 }
 
 const ADS_WINDOW = "7d" as const;
+// El resumen solo mira anuncios CON actividad: se omite la capa de descubrimiento
+// (>= 12 meses de historia, la consulta más lenta de Meta/TikTok), que en
+// la primera prueba en producción venció por timeout de 20 s.
+const ADS_OPTS = { skipDiscovery: true };
 
 export async function GET(request: Request) {
   const auth = isAuthorized(request);
@@ -72,9 +76,9 @@ export async function GET(request: Request) {
   const platforms: PlatformKey[] = ["google", "meta", "tiktok"];
   const [spendRes, ...adsRes] = await Promise.allSettled([
     fetchWindsorSpend(MOCK_CLIENTS, range),
-    fetchGoogleAdsAds(ADS_WINDOW),
-    fetchMetaAds(ADS_WINDOW),
-    fetchTiktokAds(ADS_WINDOW),
+    fetchGoogleAdsAds(ADS_WINDOW, ADS_OPTS),
+    fetchMetaAds(ADS_WINDOW, ADS_OPTS),
+    fetchTiktokAds(ADS_WINDOW, ADS_OPTS),
   ]);
 
   const unavailable: string[] = [];
