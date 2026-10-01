@@ -102,7 +102,7 @@ export async function fetchTiktokAds(rangeKey: DateRangeKey = "month", opts: Fet
   const warnings: string[] = [];
   if (!process.env.WINDSOR_API_KEY) return { ads: [], warnings };
 
-  const range = resolveDateRange(rangeKey);
+  const range = opts.range ?? resolveDateRange(rangeKey);
   const byAd = new Map<string, Accum>();
 
   // Núcleo y descubrimiento son independientes: en paralelo, el tiempo total
@@ -111,7 +111,7 @@ export async function fetchTiktokAds(rangeKey: DateRangeKey = "month", opts: Fet
   const [coreRes, discoveryRes, followersRes] = await Promise.allSettled([
     fetchLayer(CORE_FIELDS, range.dateFrom, range.dateTo),
     opts.skipDiscovery ? Promise.resolve<any[]>([]) : fetchLayer(DISCOVERY_FIELDS, discovery.dateFrom, discovery.dateTo),
-    fetchLayer(FOLLOWERS_FIELDS, range.dateFrom, range.dateTo),
+    opts.skipFollowers ? Promise.resolve<any[]>([]) : fetchLayer(FOLLOWERS_FIELDS, range.dateFrom, range.dateTo),
   ]);
 
   if (coreRes.status === "rejected") {

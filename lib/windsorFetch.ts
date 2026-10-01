@@ -14,6 +14,8 @@
  * SOLO SERVER-SIDE (usa WINDSOR_API_KEY).
  */
 
+import type { ResolvedDateRange } from "./windsor";
+
 const WINDSOR_BASE_URL = "https://connectors.windsor.ai";
 
 export const WINDSOR_TIMEOUT_MS = 20000;
@@ -109,6 +111,10 @@ export async function fetchWindsorRows(connector: string, fields: string, dateFr
  */
 export interface FetchAdsOptions {
   skipDiscovery?: boolean;
+  /** Omite la capa de seguidores (Meta/TikTok): para ventanas donde solo importan gasto, impresiones y clicks. */
+  skipFollowers?: boolean;
+  /** Rango explícito: pisa al preset `rangeKey`. */
+  range?: ResolvedDateRange;
 }
 
 /** Mensaje legible de un resultado rechazado de Promise.allSettled. */

@@ -164,6 +164,16 @@ export function resolveDateRange(key: DateRangeKey, now: Date = new Date()): Res
   }
 }
 
+/**
+ * Rango explícito entre dos fechas (YYYY-MM-DD, ambas inclusive) — para ventanas
+ * que no son un preset del selector, como las semanas completas del resumen
+ * (los presets "7d"/"14d" incluyen el día de hoy, que todavía está incompleto).
+ */
+export function rangeFromDates(dateFrom: string, dateTo: string): ResolvedDateRange {
+  const days = Math.round((parseISODate(dateTo).getTime() - parseISODate(dateFrom).getTime()) / 86400000) + 1;
+  return { dateFrom, dateTo, today: days, daysInPeriod: days };
+}
+
 function parseISODate(s: string): Date {
   const [y, m, d] = s.split("-").map(Number);
   return new Date(y, m - 1, d);

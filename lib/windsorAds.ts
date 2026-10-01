@@ -112,7 +112,7 @@ export async function fetchGoogleAdsAds(rangeKey: DateRangeKey = "month", opts: 
   const warnings: string[] = [];
   if (!process.env.WINDSOR_API_KEY) return { ads: [], warnings };
 
-  const range = resolveDateRange(rangeKey);
+  const range = opts.range ?? resolveDateRange(rangeKey);
   const byAd = new Map<string, Accum>();
 
   // Las 3 capas (núcleo, descubrimiento, miniatura) son independientes entre
