@@ -68,6 +68,8 @@ export interface Digest {
   subject: string;
   html: string;
   text: string;
+  /** Mismo contenido para un Espacio de Google Chat (formato de texto de Chat: *negrita*, `monoespaciado`, viñetas). */
+  chat: string;
   summary: { pacingAlerts: number; noClicksAds: number; accountsTracked: number; accountsWithoutBudget: number };
 }
 
@@ -252,10 +254,44 @@ export function buildDigest(input: DigestInput): Digest {
     for (const { platform, ad } of top) t.push(`- ${ad.adName} [${ad.campaignName}] ${PLATFORM_LABEL[platform]}: ${int(ad.followers ?? 0)} seguidores, ${money(ad.spend)}`);
   }
 
+  // ---------------- Google Chat
+  // Nombres de cuentas/campañas/anuncios van en monoespaciado: llevan "_" y
+  // "*" que Chat interpretaría como cursiva/negrita.
+  const code = (v: string) => "`" + v.replace(/`/g, "'") + "`";
+  const ICON: Record<PacingStatus, string> = { exceeded: "🔴", over: "🟠", under: "🟠", ok: "🟢", early: "⚪" };
+  const c: string[] = [];
+  c.push("*Pulso Ignite — resumen diario*", `${dateLabel} · día ${today} de ${daysInPeriod} del mes`, "");
+  if (unavailable.length) c.push("⚠️ *Datos que no se pudieron obtener:*", ...unavailable.map((u) => `• ${u}`), "");
+  c.push("*Seguimiento del gasto (mes en curso)*");
+  if (!pacing) c.push("Sección no disponible en este envío.");
+  else if (pacing.rows.length === 0) c.push("Ninguna cuenta tiene presupuesto cargado en la hoja de proyectados.");
+  else {
+    for (const r of pacing.rows) {
+      c.push(`${ICON[r.status]} ${code(r.name)} (${r.platforms}) — ${money(r.spend)} de ${money(r.budget)} · ${pct(r.pctExecuted)} ejecutado, mes al ${pct(r.pctElapsed)} · *${STATUS_LABEL[r.status]}*`);
+    }
+    if (pacing.withoutBudget > 0) c.push(`_${pacing.withoutBudget} cuenta(s) sin presupuesto cargado no se incluyen._`);
+  }
+  c.push("", `*Performance de anuncios (${adsWindowLabel})*`);
+  if (!alerts) c.push("Sección no disponible en este envío.");
+  else {
+    c.push(`Con impresiones y sin clicks (≥ ${int(THRESHOLDS.adMinImpressionsNoClicks)} imp.): *${alerts.noClicks.length}*`);
+    for (const { platform, ad } of noClicksShown) {
+      c.push(`• ${code(ad.adName)} · ${code(ad.campaignName)} · ${PLATFORM_LABEL[platform]} — ${int(ad.impressions)} imp. · ${money(ad.spend)}`);
+    }
+    if (alerts.noClicks.length > noClicksShown.length) c.push(`…y ${alerts.noClicks.length - noClicksShown.length} más (ver Pulso → Medios → Anuncios).`);
+    c.push("", "*Anuncios que más seguidores ganaron*");
+    const topC = alerts.topFollowers.slice(0, THRESHOLDS.topFollowersSize);
+    if (topC.length === 0) c.push("Ninguno registró seguidores ganados en la ventana (o la métrica no está disponible).");
+    for (const { platform, ad } of topC) {
+      c.push(`• ${code(ad.adName)} · ${code(ad.campaignName)} · ${PLATFORM_LABEL[platform]} — ${int(ad.followers ?? 0)} seguidores · ${money(ad.spend)}`);
+    }
+  }
+
   return {
     subject,
     html: h.join(""),
     text: t.join("\n"),
+    chat: c.join("\n"),
     summary: {
       pacingAlerts: pacingAttention.length,
       noClicksAds: alerts?.noClicks.length ?? 0,

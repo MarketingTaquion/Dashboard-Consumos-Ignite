@@ -7,17 +7,22 @@ import { fetchMetaAds } from "@/lib/windsorAdsMeta";
 import { fetchTiktokAds } from "@/lib/windsorAdsTiktok";
 import { buildDigest, PLATFORM_LABEL, type AdsByPlatform } from "@/lib/notifications";
 import { readEmailConfig, sendEmail } from "@/lib/email";
+import { readChatConfig, sendChatMessage } from "@/lib/chat";
 import type { PlatformKey } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /**
- * Resumen diario por email al equipo (gasto vs presupuesto + performance de
- * anuncios). Lo dispara el cron de vercel.json, una vez por día.
+ * Resumen diario al equipo (gasto vs presupuesto + performance de anuncios).
+ * Lo dispara el cron de vercel.json, una vez por día. Se envía a TODOS los
+ * canales que estén configurados:
  *
- * GET /api/cron/notify            → arma y envía el mail.
- * GET /api/cron/notify?dryRun=1   → arma el mail y lo devuelve, sin enviarlo.
+ * - Google Chat: GOOGLE_CHAT_WEBHOOK_URL (ver lib/chat.ts)
+ * - Email (Resend): RESEND_API_KEY + NOTIFY_FROM + NOTIFY_TO (ver lib/email.ts)
+ *
+ * GET /api/cron/notify            → arma y envía el resumen.
+ * GET /api/cron/notify?dryRun=1   → arma el resumen y lo devuelve, sin enviar.
  *
  * Seguridad: el sitio es público, así que esta ruta NO responde sin
  * `Authorization: Bearer <CRON_SECRET>` (Vercel lo agrega solo al invocar el
@@ -48,10 +53,19 @@ export async function GET(request: Request) {
 
   const dryRun = new URL(request.url).searchParams.get("dryRun") === "1";
 
-  // Config de email: se valida antes de gastar consultas a Windsor.
+  // Canales: se validan antes de gastar consultas a Windsor.
+  const chat = readChatConfig();
   const email = readEmailConfig();
-  if (!dryRun && "missing" in email) {
-    return NextResponse.json({ error: `Falta configurar el envío de email: ${email.missing.join(", ")}.` }, { status: 503 });
+  if ("invalid" in chat) {
+    return NextResponse.json({ error: chat.invalid }, { status: 503 });
+  }
+  const hasChat = "url" in chat;
+  const hasEmail = "config" in email;
+  if (!dryRun && !hasChat && !hasEmail) {
+    return NextResponse.json(
+      { error: "No hay ningún canal de envío configurado. Cargá GOOGLE_CHAT_WEBHOOK_URL (Google Chat) o RESEND_API_KEY + NOTIFY_FROM + NOTIFY_TO (email)." },
+      { status: 503 }
+    );
   }
 
   const range = resolveDateRange("month");
@@ -80,8 +94,8 @@ export async function GET(request: Request) {
     }
   });
 
-  // Sin NADA que reportar (Windsor caído del todo): no se manda un mail vacío
-  // que parezca "todo bien"; se responde error para que quede en los logs.
+  // Sin NADA que reportar (Windsor caído del todo): no se manda un resumen
+  // vacío que parezca "todo bien"; se responde error para que quede en los logs.
   if (!clients && ads.length === 0) {
     return NextResponse.json({ error: "No se pudo obtener ningún dato de Windsor.ai.", detail: unavailable }, { status: 502 });
   }
@@ -97,11 +111,24 @@ export async function GET(request: Request) {
   });
 
   if (dryRun) {
-    return NextResponse.json({ dryRun: true, subject: digest.subject, summary: digest.summary, unavailable, text: digest.text, html: digest.html });
+    return NextResponse.json({
+      dryRun: true,
+      channels: { googleChat: hasChat, email: hasEmail },
+      subject: digest.subject,
+      summary: digest.summary,
+      unavailable,
+      chat: digest.chat,
+      text: digest.text,
+      html: digest.html,
+    });
   }
 
-  if ("missing" in email) return NextResponse.json({ error: "Config de email incompleta." }, { status: 503 });
-  const sent = await sendEmail(email.config, { subject: digest.subject, html: digest.html, text: digest.text });
-  if (!sent.ok) return NextResponse.json({ error: sent.error }, { status: 502 });
-  return NextResponse.json({ ok: true, to: email.config.to.length, subject: digest.subject, summary: digest.summary, unavailable });
+  // Un canal que falla no impide el otro: se reporta cada resultado, y solo
+  // es error (502) si NINGUNO pudo enviar.
+  const results: Record<string, { ok: boolean; error?: string }> = {};
+  if (hasChat) results.googleChat = await sendChatMessage(chat.url, digest.chat);
+  if (hasEmail) results.email = await sendEmail(email.config, { subject: digest.subject, html: digest.html, text: digest.text });
+
+  const sent = Object.values(results).some((r) => r.ok);
+  return NextResponse.json({ ok: sent, results, summary: digest.summary, unavailable }, { status: sent ? 200 : 502 });
 }
