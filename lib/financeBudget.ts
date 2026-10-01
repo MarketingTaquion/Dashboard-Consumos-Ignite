@@ -60,7 +60,7 @@ function readEndpointFor(key: string): string | null {
 export async function fetchManualBudget(): Promise<{ value: number | null; warning?: string }> {
   const endpoint = readEndpointFor(BUDGET_KEY);
   if (!endpoint) {
-    return { value: null, warning: "Total presupuesto manual: falta la variable de entorno GLOBAL_CONFIG en este entorno." };
+    return { value: null, warning: "Total proyectado manual: falta la variable de entorno GLOBAL_CONFIG en este entorno." };
   }
   try {
     const res = await fetch(endpoint, { cache: "no-store" });
@@ -76,7 +76,7 @@ export async function fetchManualBudget(): Promise<{ value: number | null; warni
     const value = await res.json();
     return { value: typeof value === "number" && Number.isFinite(value) ? value : null };
   } catch (err: any) {
-    return { value: null, warning: `Total presupuesto manual: no se pudo leer de Vercel Global Config. Detalle: ${err?.message || err}` };
+    return { value: null, warning: `Total proyectado manual: no se pudo leer de Vercel Global Config. Detalle: ${err?.message || err}` };
   }
 }
 

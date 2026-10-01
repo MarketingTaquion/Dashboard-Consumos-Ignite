@@ -79,7 +79,7 @@ No son variables CSS pero son el vocabulario visual del proyecto — reusalos en
 |---|---|
 | `.chip` / `.chip.plat` / `.chip[aria-pressed="true"]` | Botones tipo pill (filtros, dropdown de fecha, selector de orden en Anuncios) |
 | `.pill.good` / `.pill.warning` / `.pill.critical` | Badges de estado con dot + texto |
-| `.stat-chip` | Chip no interactivo para mostrar un total (Total Presupuesto, Total Gastado) |
+| `.stat-chip` | Chip no interactivo para mostrar un total (Total Proyectado, Total Gastado) |
 | `.toggle-chip` (con `.toggle-track` / `.toggle-knob` adentro) | Switch real de un filtro on/off — usado por "Solo con actividad" en Finanzas, Campañas y Anuncios (`aria-pressed` en el botón controla el estado del knob vía CSS) |
 | `.op-layout` / `.sidebar` / `.client-list` / `.client-row` | Layout de 2 columnas con barra lateral de selección (clientes en Finanzas, cuentas en Campañas/Anuncios) — colapsa a una columna en pantallas angostas |
 | `.card` | Contenedor base (fondo, borde, radio — sin sombra) |

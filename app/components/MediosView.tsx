@@ -31,16 +31,6 @@ function fmtInt(n: number): string {
 function fmtMoney(n: number): string {
   return "$" + Math.round(n).toLocaleString("es-AR");
 }
-// Mismo formato compacto que los chips "Total presupuesto"/"Total gastado"
-// de Finanzas (Dashboard.tsx) — duplicado a propósito, ver la nota sobre
-// DatePreset más abajo.
-function fmtCompact(n: number): string {
-  const sign = n < 0 ? "-" : "";
-  n = Math.abs(n);
-  if (n >= 1e6) return sign + "$" + (n / 1e6).toFixed(1).replace(".", ",") + "M";
-  if (n >= 1e3) return sign + "$" + (n / 1e3).toFixed(0) + "k";
-  return sign + "$" + n.toFixed(0);
-}
 function fmtPct(n?: number): string {
   return n === undefined ? "—" : Math.round(n) + "%";
 }
@@ -347,12 +337,12 @@ export default function MediosView() {
             )}
           </div>
           <div className="stat-chip">
-            <span className="stat-label">Total presupuesto</span>
-            <span className="stat-value num">{fmtCompact(totalBudget)}</span>
+            <span className="stat-label">Total proyectado</span>
+            <span className="stat-value num">{fmtMoney(totalBudget)}</span>
           </div>
           <div className="stat-chip">
             <span className="stat-label">Total gastado</span>
-            <span className="stat-value num">{fmtCompact(totalSpend)}</span>
+            <span className="stat-value num">{fmtMoney(totalSpend)}</span>
           </div>
           <button className="toggle-chip" aria-pressed={onlyActive} onClick={() => setOnlyActive((v) => !v)}>
             <span className="toggle-track">
