@@ -52,15 +52,25 @@ Todavía no existen estas variables — se van a necesitar cuando se cree el pro
 
 <!-- TODO(humano): confirmar los nombres exactos de variable una vez creado el proyecto Supabase — estos son los nombres convencionales del SDK de Supabase, no verificados contra un proyecto real todavía. -->
 
-## Resumen diario por email al equipo
+## Resumen diario al equipo (Google Chat y/o email)
 
 Lo envía [`app/api/cron/notify`](../../app/api/cron/notify/route.ts), disparado por el cron de [`vercel.json`](../../vercel.json) (una vez por día, `0 12 * * *` UTC = 9:00 hs Argentina; en el plan Hobby Vercel lo ejecuta en algún momento dentro de esa hora). El contenido y los umbrales están en [`lib/notifications.ts`](../../lib/notifications.ts) (`THRESHOLDS`).
 
 | Variable | Obligatoria | Descripción |
 |---|---|---|
 | `CRON_SECRET` | Sí | Secreto largo y aleatorio. Vercel lo manda como `Authorization: Bearer …` al invocar el cron. **Sin esta variable la ruta responde 503 y no hace nada** — el sitio es público, la ruta no puede quedar abierta. |
-| `RESEND_API_KEY` | Sí | API key de [Resend](https://resend.com). |
-| `NOTIFY_FROM` | Sí | Remitente, ej. `Pulso Ignite <pulso@taquion.com.ar>`. El dominio tiene que estar verificado en Resend. |
-| `NOTIFY_TO` | Sí | Destinatarios separados por coma. |
+| `RESEND_API_KEY` | Solo para el canal de email | API key de [Resend](https://resend.com). |
+| `NOTIFY_FROM` | Solo para el canal de email | Remitente, ej. `Pulso Ignite <pulso@taquion.com.ar>`. El dominio tiene que estar verificado en Resend. |
+| `NOTIFY_TO` | Solo para el canal de email | Destinatarios separados por coma. |
 
-Probar sin enviar nada: `GET /api/cron/notify?dryRun=1` con el header `Authorization: Bearer <CRON_SECRET>` devuelve el asunto, el resumen y el HTML. Sin `dryRun` y con alguna variable de envío faltante, responde 503 indicando cuáles faltan.
+Probar sin enviar nada: `GET /api/cron/notify?dryRun=1` con el header `Authorization: Bearer <CRON_SECRET>` devuelve el resumen sin enviar nada. Sin ningún canal configurado responde 503 indicando qué cargar.
+
+### Canal Google Chat (webhook de un Espacio)
+
+El resumen se envía a **todos los canales configurados**: Google Chat, email, o ambos. Con solo `GOOGLE_CHAT_WEBHOOK_URL` y `CRON_SECRET` alcanza; las variables de email son opcionales.
+
+| Variable | Obligatoria | Descripción |
+|---|---|---|
+| `GOOGLE_CHAT_WEBHOOK_URL` | Sí, para usar Google Chat | URL del webhook entrante del Espacio. Tiene que ser un **Espacio con nombre** (los chats grupales sin nombre no admiten webhooks) y el administrador de Google Workspace tiene que permitir webhooks. Debe empezar con `https://chat.googleapis.com/v1/spaces/`; cualquier otro destino se rechaza. **Es una credencial** (lleva `key` y `token`): con ella cualquiera puede escribir en el espacio. Cargarla solo en Vercel, como *Sensitive*; si se expone, borrar el webhook en el Espacio y crear uno nuevo. |
+
+Sin ningún canal configurado, `/api/cron/notify` responde 503 indicando qué cargar. Con `?dryRun=1` devuelve el resumen en los formatos de Chat y de email sin enviar nada.
