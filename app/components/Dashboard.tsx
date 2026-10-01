@@ -546,7 +546,7 @@ export default function Dashboard() {
             )}
           </div>
           <div className="stat-chip">
-            <span className="stat-label">Total presupuesto</span>
+            <span className="stat-label">Total proyectado</span>
             {editingBudget ? (
               <span className="budget-edit-row">
                 <input

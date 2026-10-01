@@ -337,7 +337,7 @@ export default function MediosView() {
             )}
           </div>
           <div className="stat-chip">
-            <span className="stat-label">Total presupuesto</span>
+            <span className="stat-label">Total proyectado</span>
             <span className="stat-value num">{fmtMoney(totalBudget)}</span>
           </div>
           <div className="stat-chip">

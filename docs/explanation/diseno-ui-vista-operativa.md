@@ -19,7 +19,7 @@ El trade-off aceptado: se pierde el "de un vistazo" ejecutivo que tenía la Opci
 
 La versión anterior (V1, ver [relación con la V1](./relacion-con-v1-y-spec.md)) tenía 4 stat-tiles agregados (Invertido MTD, Ritmo agregado, Clientes en riesgo, Alertas técnicas), un panel de Google Analytics, y una vista de "Pacing por cliente" separada de la tabla de eficiencia. Ninguno de los 3 sobrevivió al rediseño:
 
-- Los **stat-tiles agregados** fueron parcialmente recuperados más adelante como chips de "Total Presupuesto" / "Total Gastado" (ver [tokens de diseño](../reference/design-tokens.md#componentes-reutilizables-clases-no-tokens)), a pedido explícito, tras un wireframe a mano que los pedía de vuelta.
+- Los **stat-tiles agregados** fueron parcialmente recuperados más adelante como chips de "Total Proyectado" / "Total Gastado" (ver [tokens de diseño](../reference/design-tokens.md#componentes-reutilizables-clases-no-tokens)), a pedido explícito, tras un wireframe a mano que los pedía de vuelta.
 - El **panel de GA** y la **vista de pacing por cliente separada** no se recuperaron — quedan reemplazados por los dots de estado en la barra lateral de clientes y no están en el backlog activo. Si hace falta esa información de nuevo, es una decisión de producto pendiente, no un olvido técnico.
 
 ## El patrón del control de fecha (Google Ads / Meta como referencia)
