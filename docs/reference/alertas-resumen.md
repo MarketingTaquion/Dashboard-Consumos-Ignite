@@ -31,3 +31,13 @@ Todo sobre una **ventana de 7 días completos** (del día −7 al día −1) y, 
 - **Costo por seguidor mezcla** seguidores de Instagram y likes de página en Meta. El campo de TikTok es "paid follows".
 - **Umbrales sin validar con el equipo:** son una propuesta inicial.
 - **Sin histórico propio:** la comparación con la semana anterior se arma consultando de nuevo a Windsor, no guardando snapshots (eso queda para Supabase).
+
+## Registro y moderación
+
+Cada envío del cron se guarda (con el texto exacto de los mensajes) y cada alerta detectada queda registrada para consultarla en **Medios → Alertas**. Cómo activarlo: [activar el registro de alertas](../how-to/activar-registro-de-alertas.md).
+
+- **Qué se registra como alerta:** proyección fuera de rango, mes próximo sin cargar, hoja desactualizada, variación semanal, frecuencia alta y CTR bajo el de su campaña. Los rankings de costo por seguidor son informativos y no se registran.
+- **Se registran todas las detectadas**, aunque el mensaje solo liste las primeras 6 de cada tipo. Las que quedaron fuera se marcan "No figuró en el mensaje (límite de filas)".
+- **Repetición:** cada alerta tiene una huella (por ejemplo, la misma campaña con frecuencia alta). La pantalla muestra cuántas veces apareció ("2.ª vez de 3, desde 1 oct").
+- **Moderación:** Pendiente → Revisada o Descartada (con motivo obligatorio), reabrible; el historial guarda quién, cuándo y la nota.
+- **API:** `GET /api/alerts` (registro) y `PATCH /api/alerts/<id>` (moderar, cuerpo `{ status, note?, by }`).

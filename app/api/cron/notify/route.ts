@@ -11,6 +11,8 @@ import type { FetchAdsOptions } from "@/lib/windsorFetch";
 import { buildDigest, PLATFORM_LABEL, type AdsByPlatform } from "@/lib/notifications";
 import { readEmailConfig, sendEmail } from "@/lib/email";
 import { readChatConfig, sendChatMessage } from "@/lib/chat";
+import { newRunId, readStoreConfig, saveRun } from "@/lib/alertLog";
+import type { DeliveryResult, RunRecord } from "@/lib/alertTypes";
 import type { AdRow, PlatformKey } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -149,10 +151,13 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "No se pudo obtener ningún dato de Windsor.ai.", detail: unavailable }, { status: 502 });
   }
 
+  const dateLabel = new Date().toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long", timeZone: TZ });
+  const windowLabel = `Últimos 7 días (${ddmm(current.dateFrom)} al ${ddmm(current.dateTo)})`;
+
   const digest = buildDigest({
     today: monthRange.today,
     daysInPeriod: monthRange.daysInPeriod,
-    dateLabel: new Date().toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long", timeZone: TZ }),
+    dateLabel,
     currentMonthKey,
     nextMonthKey: nextMonthKey(currentMonthKey),
     clients,
@@ -160,7 +165,7 @@ export async function GET(request: Request) {
     adsCurrent,
     adsPrevious,
     frequency,
-    windowLabel: `Últimos 7 días (${ddmm(current.dateFrom)} al ${ddmm(current.dateTo)})`,
+    windowLabel,
     unavailable,
   });
 
@@ -196,5 +201,38 @@ export async function GET(request: Request) {
   if (hasEmail) results.email = await sendEmail(email.config, { subject: digest.subject, html: digest.html, text: digest.text });
 
   const sentAny = Object.values(results).some((r) => r.ok);
-  return NextResponse.json({ ok: sentAny, results, summary: digest.summary, unavailable }, { status: sentAny ? 200 : 502 });
+
+  // Registro de trazabilidad (pantalla "Alertas" de Medios): queda guardado el
+  // envío completo, haya tenido alertas o no, y haya llegado o no. Un fallo del
+  // registro NUNCA cambia el resultado del envío: solo se informa en `log`.
+  const sentAt = new Date().toISOString();
+  const run: RunRecord = {
+    id: newRunId(),
+    sentAt,
+    dateLabel,
+    subject: digest.subject,
+    alertCount: digest.alertDrafts.length,
+    alertsBySection: digest.summary.sections,
+    deliveries: Object.entries(results).map(([channel, r]): DeliveryResult => ({
+      channel: channel as DeliveryResult["channel"],
+      ok: r.ok,
+      detail: r.error ?? (r.sent !== undefined ? `${r.sent} mensaje${r.sent === 1 ? "" : "s"}` : undefined),
+    })),
+    messages: digest.chatMessages,
+    unavailable,
+    windowLabel,
+  };
+  let log: { ok: boolean; error?: string };
+  if (!readStoreConfig()) {
+    log = { ok: false, error: "El registro de alertas no está configurado (falta conectar Upstash Redis en Vercel → Storage)." };
+  } else {
+    try {
+      await saveRun(run, digest.alertDrafts);
+      log = { ok: true };
+    } catch (err: any) {
+      log = { ok: false, error: errMsg(err) };
+    }
+  }
+
+  return NextResponse.json({ ok: sentAny, results, summary: digest.summary, unavailable, log }, { status: sentAny ? 200 : 502 });
 }

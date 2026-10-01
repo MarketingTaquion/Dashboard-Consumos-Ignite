@@ -1,12 +1,15 @@
 import type { AdRow, ClientData, PlatformKey } from "./types";
 import type { MediaPlanTarget } from "./mediaPlan";
 import type { FrequencyRow } from "./windsorFrequency";
+import type { AlertDraft, AlertSeverity, AlertType } from "./alertTypes";
 
 /**
  * Resumen del equipo (martes y jueves): alertas de gasto contra presupuesto y de
  * performance de anuncios. Este archivo SOLO arma el contenido (funciones puras,
  * sin red): lo consumen el envío a Google Chat (lib/chat.ts) y el email
- * (lib/email.ts) desde app/api/cron/notify/route.ts.
+ * (lib/email.ts) desde app/api/cron/notify/route.ts. Además de los mensajes,
+ * devuelve cada alerta como un registro estructurado (`alertDrafts`) para el
+ * registro de trazabilidad (lib/alertLog.ts, pantalla "Alertas" de Medios).
  *
  * Alertas (definidas por el equipo, 2026-10-01):
  *   Gasto contra proyectado: proyección a fin de mes · falta cargar el mes
@@ -115,6 +118,8 @@ export interface Digest {
   text: string;
   /** Mensajes de Google Chat, en orden (el límite de Chat por mensaje es chico). */
   chatMessages: string[];
+  /** Cada alerta detectada, lista para el registro de trazabilidad. */
+  alertDrafts: AlertDraft[];
   summary: { alerts: number; sections: Record<string, number> };
 }
 
@@ -223,6 +228,8 @@ function renderSectionHtml(s: Section): string {
 interface Built {
   blocks: Block[];
   alerts: number;
+  /** Una por alerta detectada (incluye las que quedaron fuera de la lista del mensaje). */
+  drafts: AlertDraft[];
 }
 
 const monthMatches = (mes: string, key: string) => mes.startsWith(key);
@@ -233,6 +240,20 @@ function platformsOf(c: ClientData): string {
     .join(" + ");
 }
 
+/** Convierte un ítem del mensaje en el registro estructurado de esa alerta (texto plano). */
+function draftFrom(item: Item, meta: { type: AlertType; severity: AlertSeverity; fingerprint: string; listed?: boolean }): AlertDraft {
+  return {
+    type: meta.type,
+    severity: meta.severity,
+    fingerprint: meta.fingerprint,
+    listed: meta.listed ?? true,
+    title: rich(item.head, "text"),
+    lines: item.lines.map((l) => rich(l, "text")),
+  };
+}
+
+const built = (blocks: Block[], drafts: AlertDraft[]): Built => ({ blocks, alerts: drafts.length, drafts });
+
 // ----- 1) Proyección a fin de mes
 
 type ProjStatus = "exceeded" | "over" | "under" | "ok" | "pending";
@@ -240,7 +261,7 @@ type ProjStatus = "exceeded" | "over" | "under" | "ok" | "pending";
 export function projectionBlock(clients: ClientData[] | null, today: number, daysInPeriod: number): Built {
   const T = THRESHOLDS;
   if (!clients) {
-    return { blocks: [{ emoji: "📈", title: "Proyección a fin de mes", items: [], empty: "⚠️ Sección no disponible en este envío." }], alerts: 0 };
+    return built([{ emoji: "📈", title: "Proyección a fin de mes", items: [], empty: "⚠️ Sección no disponible en este envío." }], []);
   }
   // Windsor sincroniza una vez por día: a la mañana el gasto llega hasta AYER, así
   // que se proyecta sobre los días completos (today - 1), no sobre today.
@@ -282,11 +303,20 @@ export function projectionBlock(clients: ClientData[] | null, today: number, day
     return { icon: ICON[r.status], head: [C(r.c.name), ` · ${platformsOf(r.c)}`], lines };
   });
 
+  const drafts: AlertDraft[] = [];
+  rows.forEach((r, i) => {
+    if (r.status === "exceeded" || r.status === "over" || r.status === "under") {
+      drafts.push(
+        draftFrom(items[i], { type: "projection", severity: r.status === "under" ? "warning" : "critical", fingerprint: `projection:${r.c.accountId ?? r.c.key}:${r.status}` })
+      );
+    }
+  });
+
   const notes: string[] = [`Gasto del mes hasta ayer (${completeDays} día${completeDays === 1 ? "" : "s"} de datos), proyectado a ${daysInPeriod} días.`];
   if (withoutBudget > 0) notes.push(`${withoutBudget} cuenta${withoutBudget === 1 ? "" : "s"} sin presupuesto cargado no se incluye${withoutBudget === 1 ? "" : "n"}.`);
 
-  return {
-    blocks: [
+  return built(
+    [
       {
         emoji: "📈",
         title: "Proyección a fin de mes",
@@ -295,8 +325,8 @@ export function projectionBlock(clients: ClientData[] | null, today: number, day
         empty: "Ninguna cuenta tiene presupuesto cargado en la hoja de proyectados.",
       },
     ],
-    alerts: rows.filter((r) => r.status === "exceeded" || r.status === "over" || r.status === "under").length,
-  };
+    drafts
+  );
 }
 
 // ----- 2) Falta cargar el presupuesto del mes próximo (última semana del mes)
@@ -329,8 +359,9 @@ export function nextMonthBlock(
     head: [C(name)],
     lines: [[`Tiene presupuesto en ${monthName(currentKey)}, pero no figura en la hoja para ${mes}.`]],
   }));
-  return {
-    blocks: [
+  const drafts = missing.map(([cuenta], i) => draftFrom(items[i], { type: "next_month", severity: "warning", fingerprint: `next_month:${cuenta}:${nextKey}` }));
+  return built(
+    [
       {
         emoji: "📅",
         title: `Presupuesto de ${mes}`,
@@ -339,8 +370,8 @@ export function nextMonthBlock(
         empty: `✅ Todas las cuentas con presupuesto en ${monthName(currentKey)} ya tienen ${mes} cargado.`,
       },
     ],
-    alerts: missing.length,
-  };
+    drafts
+  );
 }
 
 // ----- 3) Hoja de proyectados desactualizada en Windsor
@@ -348,39 +379,34 @@ export function nextMonthBlock(
 export function sheetBlock(sheet: DigestInput["sheet"], currentKey: string): Built {
   const action: Rich = ["🛠️ Qué hacer: Windsor → Data Sources → Google Sheets → ", B("Clear Cache"), ", y recargar."];
   const title = "Hoja de proyectados en Windsor";
+  const problem = (item: Item, kind: string): Built =>
+    built([{ emoji: "🔄", title, items: [item] }], [draftFrom(item, { type: "sheet", severity: "critical", fingerprint: `sheet:${kind}` })]);
+
   if (!sheet) {
-    return { blocks: [{ emoji: "🔄", title, items: [{ icon: "🔴", head: [B("No se pudo leer la hoja")], lines: [["Windsor no respondió; los presupuestos de este resumen pueden estar incompletos."]] }] }], alerts: 1 };
+    return problem({ icon: "🔴", head: [B("No se pudo leer la hoja")], lines: [["Windsor no respondió; los presupuestos de este resumen pueden estar incompletos."]] }, "unreadable");
   }
   if (sheet.warning) {
-    return { blocks: [{ emoji: "🔄", title, items: [{ icon: "🔴", head: [B("No se pudo leer la hoja")], lines: [[sheet.warning.slice(0, 220)]] }] }], alerts: 1 };
+    return problem({ icon: "🔴", head: [B("No se pudo leer la hoja")], lines: [[sheet.warning.slice(0, 220)]] }, "unreadable");
   }
   if (sheet.targets.length === 0) {
-    return { blocks: [{ emoji: "🔄", title, items: [{ icon: "🔴", head: [B("Windsor devolvió la hoja vacía")], lines: [action] }] }], alerts: 1 };
+    return problem({ icon: "🔴", head: [B("Windsor devolvió la hoja vacía")], lines: [action] }, "empty");
   }
   const current = sheet.targets.filter((t) => monthMatches(t.mes, currentKey));
   if (current.length === 0) {
     const months = [...new Set(sheet.targets.map((t) => t.mes.slice(0, 7)))].filter(Boolean).sort();
-    return {
-      blocks: [
-        {
-          emoji: "🔄",
-          title,
-          items: [
-            {
-              icon: "🔴",
-              head: [B(`Windsor no tiene filas de ${monthName(currentKey)}`)],
-              lines: [[`Meses que sí tiene: ${months.join(", ") || "ninguno"}. Si el Media Analyst ya cargó ${monthName(currentKey)}, Windsor todavía no sincronizó.`], action],
-            },
-          ],
-        },
-      ],
-      alerts: 1,
-    };
+    return problem(
+      {
+        icon: "🔴",
+        head: [B(`Windsor no tiene filas de ${monthName(currentKey)}`)],
+        lines: [[`Meses que sí tiene: ${months.join(", ") || "ninguno"}. Si el Media Analyst ya cargó ${monthName(currentKey)}, Windsor todavía no sincronizó.`], action],
+      },
+      `stale:${currentKey}`
+    );
   }
-  return { blocks: [{ emoji: "🔄", title, items: [], empty: `✅ Al día: Windsor tiene ${current.length} fila${current.length === 1 ? "" : "s"} de ${monthName(currentKey)}.` }], alerts: 0 };
+  return built([{ emoji: "🔄", title, items: [], empty: `✅ Al día: Windsor tiene ${current.length} fila${current.length === 1 ? "" : "s"} de ${monthName(currentKey)}.` }], []);
 }
 
-// ----- 4) Costo por seguidor: 3 mejores y 3 peores
+// ----- 4) Costo por seguidor: 3 mejores y 3 peores (ranking informativo: no genera alertas)
 
 export function costPerFollowerBlocks(groups: AdsByPlatform[]): Built {
   const T = THRESHOLDS;
@@ -407,13 +433,13 @@ export function costPerFollowerBlocks(groups: AdsByPlatform[]): Built {
   });
   const note = `Seguidores ganados atribuidos al anuncio (Meta y TikTok), con al menos ${T.costPerFollowerMinFollowers}. Menor costo = mejor.`;
   const none = "Ningún anuncio registró seguidores en la ventana (o la métrica no está disponible).";
-  return {
-    blocks: [
+  return built(
+    [
       { emoji: "🏆", title: `Los ${T.costPerFollowerListSize} más baratos por seguidor`, note, items: best.map((x, i) => toItem(x, ["🥇", "🥈", "🥉"][i] ?? "✅")), empty: none },
       { emoji: "💸", title: `Los ${T.costPerFollowerListSize} más caros por seguidor`, items: worst.map((x) => toItem(x, "🔻")), empty: withCost.length === 0 ? none : "No hay suficientes anuncios para armar este ranking." },
     ],
-    alerts: 0,
-  };
+    []
+  );
 }
 
 // ----- 5) Variación contra la semana anterior (gasto, impresiones, CTR)
@@ -448,7 +474,7 @@ export function weekOverWeekBlock(current: AdsByPlatform[], previous: AdsByPlatf
   const cur = aggregateByCampaign(current);
   const prev = aggregateByCampaign(previous);
 
-  const flagged: Array<{ cur: Agg; prev: Agg; dSpend?: number; dImp?: number; dCtr?: number; worst: number; hits: Set<string> }> = [];
+  const flagged: Array<{ key: string; cur: Agg; prev: Agg; dSpend?: number; dImp?: number; dCtr?: number; worst: number; hits: Set<string> }> = [];
   for (const [key, c] of cur) {
     const p = prev.get(key);
     if (!p || p.impressions < T.wowMinPrevImpressions) continue;
@@ -460,14 +486,14 @@ export function weekOverWeekBlock(current: AdsByPlatform[], previous: AdsByPlatf
     if (dImp !== undefined && Math.abs(dImp) >= T.wowChangePct) hits.add("imp");
     if (dCtr !== undefined && Math.abs(dCtr) >= T.wowCtrChangePct) hits.add("ctr");
     if (hits.size === 0) continue;
-    flagged.push({ cur: c, prev: p, dSpend, dImp, dCtr, hits, worst: Math.max(Math.abs(dSpend ?? 0), Math.abs(dImp ?? 0), Math.abs(dCtr ?? 0)) });
+    flagged.push({ key, cur: c, prev: p, dSpend, dImp, dCtr, hits, worst: Math.max(Math.abs(dSpend ?? 0), Math.abs(dImp ?? 0), Math.abs(dCtr ?? 0)) });
   }
   flagged.sort((a, b) => b.worst - a.worst);
 
   const line = (label: string, d: number | undefined, detail: string, hit: boolean): Rich | null =>
     d === undefined ? null : [trend(d) + " ", hit ? B(`${label} ${signed(d)}`) : `${label} ${signed(d)}`, ` (${detail})`];
 
-  const items: Item[] = flagged.slice(0, T.listSize).map((f) => {
+  const allItems: Item[] = flagged.map((f) => {
     const lines: Array<Rich | null> = [
       [`${PLATFORM_LABEL[f.cur.platform]} · ${f.cur.accountName}`],
       line("Gasto", f.dSpend, `${money(f.prev.spend)} → ${money(f.cur.spend)}`, f.hits.has("spend")),
@@ -476,19 +502,20 @@ export function weekOverWeekBlock(current: AdsByPlatform[], previous: AdsByPlatf
     ];
     return { icon: "🔔", head: [C(f.cur.campaignName)], lines: lines.filter((l): l is Rich => l !== null) };
   });
+  const drafts = allItems.map((it, i) => draftFrom(it, { type: "week_over_week", severity: "warning", fingerprint: `week_over_week:${flagged[i].key}`, listed: i < T.listSize }));
 
-  return {
-    blocks: [
+  return built(
+    [
       {
         emoji: "📆",
         title: "Variación contra la semana anterior",
         note: `${windowLabel} contra los 7 días anteriores. Se avisa si el gasto o las impresiones cambian ${T.wowChangePct}% o más, o el CTR ${T.wowCtrChangePct}% o más (campañas con ${int(T.wowMinPrevImpressions)}+ impresiones la semana previa).`,
-        items,
+        items: allItems.slice(0, T.listSize),
         empty: "✅ Ninguna campaña tuvo variaciones grandes contra la semana anterior.",
       },
     ],
-    alerts: flagged.length,
-  };
+    drafts
+  );
 }
 
 // ----- 6) Frecuencia alta en Meta
@@ -497,29 +524,30 @@ export function frequencyBlock(rows: FrequencyRow[] | null, windowLabel: string)
   const T = THRESHOLDS;
   const base = { emoji: "🔁", title: "Frecuencia en Meta" };
   if (!rows) {
-    return { blocks: [{ ...base, items: [], empty: "⚠️ Sección no disponible en este envío." }], alerts: 0 };
+    return built([{ ...base, items: [], empty: "⚠️ Sección no disponible en este envío." }], []);
   }
   const eligible = rows.filter((r) => r.impressions >= T.frequencyMinImpressions && r.reach > 0);
   const high = eligible.filter((r) => r.frequency >= T.frequencyHigh).sort((a, b) => b.frequency - a.frequency);
   const top = [...eligible].sort((a, b) => b.frequency - a.frequency)[0];
 
-  const items: Item[] = high.slice(0, T.listSize).map((r) => ({
+  const allItems: Item[] = high.map((r) => ({
     icon: "🔥",
     head: [C(r.campaignName)],
     lines: [[`${r.accountName}`], ["🔁 Frecuencia ", B(dec1(r.frequency)), ` · ${int(r.impressions)} impresiones · alcance ${int(r.reach)}`]],
   }));
+  const drafts = allItems.map((it, i) => draftFrom(it, { type: "frequency", severity: "warning", fingerprint: `frequency:${high[i].accountId}:${high[i].campaignId}`, listed: i < T.listSize }));
   const topText = top ? ` La más alta es ${dec1(top.frequency)} (${top.campaignName}).` : "";
-  return {
-    blocks: [
+  return built(
+    [
       {
         ...base,
         note: `${windowLabel}. Se avisa desde ${T.frequencyHigh} (cuántas veces vio el anuncio, en promedio, cada persona alcanzada).`,
-        items,
+        items: allItems.slice(0, T.listSize),
         empty: eligible.length === 0 ? "Sin campañas de Meta con volumen suficiente para evaluar." : `✅ Ninguna campaña llega a frecuencia ${T.frequencyHigh}.${topText}`,
       },
     ],
-    alerts: high.length,
-  };
+    drafts
+  );
 }
 
 // ----- 7) CTR muy por debajo del promedio de su campaña
@@ -548,7 +576,7 @@ export function ctrBelowCampaignBlock(groups: AdsByPlatform[], windowLabel: stri
   }
   flagged.sort((a, b) => a.gap - b.gap);
 
-  const items: Item[] = flagged.slice(0, T.listSize).map((f) => ({
+  const allItems: Item[] = flagged.map((f) => ({
     icon: "📉",
     head: [C(f.ad.adName)],
     lines: [
@@ -557,18 +585,19 @@ export function ctrBelowCampaignBlock(groups: AdsByPlatform[], windowLabel: stri
       [`👁️ ${int(f.ad.impressions)} impresiones · gastó ${money(f.ad.spend)}`],
     ],
   }));
-  return {
-    blocks: [
+  const drafts = allItems.map((it, i) => draftFrom(it, { type: "ctr_below_campaign", severity: "warning", fingerprint: `ctr_below_campaign:${flagged[i].platform}:${flagged[i].ad.adId}`, listed: i < T.listSize }));
+  return built(
+    [
       {
         emoji: "🖱️",
         title: "CTR muy por debajo del de su campaña",
         note: `${windowLabel}. Anuncios con CTR menor a ${Math.round(T.ctrBelowCampaignRatio * 100)}% del promedio de su campaña (campañas con ${T.ctrMinAdsInCampaign}+ anuncios de ${int(T.ctrMinImpressions)}+ impresiones). Candidatos a pausar o renovar el creativo.`,
-        items,
+        items: allItems.slice(0, T.listSize),
         empty: "✅ Ningún anuncio está muy por debajo del CTR de su campaña.",
       },
     ],
-    alerts: flagged.length,
-  };
+    drafts
+  );
 }
 
 // ------------------------------------------------------------------ armado
@@ -598,7 +627,8 @@ export function buildDigest(input: DigestInput): Digest {
     frecuencia: freq.alerts,
     ctrBajo: ctr.alerts,
   };
-  const alerts = Object.values(counts).reduce((a, b) => a + b, 0);
+  const alertDrafts = [...projection.drafts, ...(nextMonth?.drafts ?? []), ...sheetB.drafts, ...wow.drafts, ...freq.drafts, ...ctr.drafts];
+  const alerts = alertDrafts.length;
 
   const subject =
     alerts > 0 ? `Pulso Ignite — ${alerts} alerta${alerts === 1 ? "" : "s"} para revisar (${dateLabel})` : `Pulso Ignite — resumen sin alertas (${dateLabel})`;
@@ -634,5 +664,5 @@ export function buildDigest(input: DigestInput): Digest {
   h.push(...sections.map(renderSectionHtml));
   h.push(`<p style="margin-top:28px;font-size:11px;color:#98a2b3">Enviado automáticamente por Pulso Ignite. Datos de Windsor.ai al momento del envío.</p></div>`);
 
-  return { subject, html: h.join(""), text, chatMessages, summary: { alerts, sections: counts } };
+  return { subject, html: h.join(""), text, chatMessages, alertDrafts, summary: { alerts, sections: counts } };
 }

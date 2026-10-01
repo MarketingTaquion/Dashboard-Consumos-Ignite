@@ -107,6 +107,7 @@ export default function ComparacionView() {
         <a href="/medios">Campañas</a>
         <a href="/medios/anuncios">Anuncios</a>
         <a href="/medios/comparacion" aria-current="page">Comparación de plataformas</a>
+        <a href="/medios/alertas">Alertas</a>
       </nav>
 
       {data.warnings?.map((w, i) => (
