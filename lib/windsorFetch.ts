@@ -100,6 +100,17 @@ export async function fetchWindsorRows(connector: string, fields: string, dateFr
   return rows;
 }
 
+/**
+ * Opciones de los fetchers de anuncios (lib/windsorAds*.ts).
+ * skipDiscovery: no pide la capa de descubrimiento (ventana de >= 12 meses para
+ * encontrar anuncios sin actividad en el período, y la miniatura de Google). Es la
+ * consulta más lenta, y quien solo necesita los anuncios CON actividad (el resumen
+ * diario del cron) no la usa: un anuncio sin impresiones no se marca nunca.
+ */
+export interface FetchAdsOptions {
+  skipDiscovery?: boolean;
+}
+
 /** Mensaje legible de un resultado rechazado de Promise.allSettled. */
 export function reasonMessage(result: PromiseRejectedResult): string {
   return (result.reason as any)?.message || String(result.reason);

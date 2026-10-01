@@ -1,5 +1,5 @@
 import type { AdRow } from "./types";
-import { fetchWindsorRows, reasonMessage } from "./windsorFetch";
+import { fetchWindsorRows, reasonMessage, type FetchAdsOptions } from "./windsorFetch";
 import { NON_CRITICAL } from "./cache";
 import { resolveDateRange, discoveryWindowFor, type DateRangeKey } from "./windsor";
 
@@ -98,7 +98,7 @@ function fetchLayer(fields: string, dateFrom: string, dateTo: string): Promise<a
   return fetchWindsorRows(CONNECTOR, fields, dateFrom, dateTo);
 }
 
-export async function fetchTiktokAds(rangeKey: DateRangeKey = "month"): Promise<{ ads: AdRow[]; warnings: string[]; failed?: boolean }> {
+export async function fetchTiktokAds(rangeKey: DateRangeKey = "month", opts: FetchAdsOptions = {}): Promise<{ ads: AdRow[]; warnings: string[]; failed?: boolean }> {
   const warnings: string[] = [];
   if (!process.env.WINDSOR_API_KEY) return { ads: [], warnings };
 
@@ -110,7 +110,7 @@ export async function fetchTiktokAds(rangeKey: DateRangeKey = "month"): Promise<
   const discovery = discoveryWindowFor(range);
   const [coreRes, discoveryRes, followersRes] = await Promise.allSettled([
     fetchLayer(CORE_FIELDS, range.dateFrom, range.dateTo),
-    fetchLayer(DISCOVERY_FIELDS, discovery.dateFrom, discovery.dateTo),
+    opts.skipDiscovery ? Promise.resolve<any[]>([]) : fetchLayer(DISCOVERY_FIELDS, discovery.dateFrom, discovery.dateTo),
     fetchLayer(FOLLOWERS_FIELDS, range.dateFrom, range.dateTo),
   ]);
 
