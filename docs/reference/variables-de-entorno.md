@@ -51,3 +51,16 @@ Todavía no existen estas variables — se van a necesitar cuando se cree el pro
 - `SUPABASE_SERVICE_ROLE_KEY` (server-side únicamente, nunca con prefijo `NEXT_PUBLIC_`)
 
 <!-- TODO(humano): confirmar los nombres exactos de variable una vez creado el proyecto Supabase — estos son los nombres convencionales del SDK de Supabase, no verificados contra un proyecto real todavía. -->
+
+## Resumen diario por email al equipo
+
+Lo envía [`app/api/cron/notify`](../../app/api/cron/notify/route.ts), disparado por el cron de [`vercel.json`](../../vercel.json) (una vez por día, `0 12 * * *` UTC = 9:00 hs Argentina; en el plan Hobby Vercel lo ejecuta en algún momento dentro de esa hora). El contenido y los umbrales están en [`lib/notifications.ts`](../../lib/notifications.ts) (`THRESHOLDS`).
+
+| Variable | Obligatoria | Descripción |
+|---|---|---|
+| `CRON_SECRET` | Sí | Secreto largo y aleatorio. Vercel lo manda como `Authorization: Bearer …` al invocar el cron. **Sin esta variable la ruta responde 503 y no hace nada** — el sitio es público, la ruta no puede quedar abierta. |
+| `RESEND_API_KEY` | Sí | API key de [Resend](https://resend.com). |
+| `NOTIFY_FROM` | Sí | Remitente, ej. `Pulso Ignite <pulso@taquion.com.ar>`. El dominio tiene que estar verificado en Resend. |
+| `NOTIFY_TO` | Sí | Destinatarios separados por coma. |
+
+Probar sin enviar nada: `GET /api/cron/notify?dryRun=1` con el header `Authorization: Bearer <CRON_SECRET>` devuelve el asunto, el resumen y el HTML. Sin `dryRun` y con alguna variable de envío faltante, responde 503 indicando cuáles faltan.

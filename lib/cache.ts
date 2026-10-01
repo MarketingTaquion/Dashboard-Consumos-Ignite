@@ -98,7 +98,13 @@ export function staleWarning(ageMs: number, reason?: string): string {
  * Los mensajes de falla siempre dicen "falló …", "no se pudo …", "Timeout …"
  * o "HTTP <status>".
  */
+export const NON_CRITICAL = "(no crítico)";
+
 export function isDegradedWarning(warning: string): boolean {
+  // Una capa opcional que falla (ej. seguidores por anuncio) avisa, pero no
+  // vuelve "parcial" al resultado: si no, una capa rechazada de forma
+  // permanente por Windsor impediría cachear la ruta entera.
+  if (warning.includes(NON_CRITICAL)) return false;
   return /fall[óo]|no se pudo|timeout|HTTP \d{3}/i.test(warning);
 }
 

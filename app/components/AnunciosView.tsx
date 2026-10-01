@@ -487,6 +487,9 @@ export default function AnunciosView() {
                               <div className="ad-metric-row"><span>CTR</span><span className="num">{ad.ctr.toFixed(1)}%</span></div>
                               <div className="ad-metric-row"><span>CPL</span><span className="num">{fmtMoney(ad.cpl)}</span></div>
                               <div className="ad-metric-row"><span>Conversiones</span><span className="num">{fmtInt(ad.conversions)}</span></div>
+                              {ad.followers !== undefined && (
+                                <div className="ad-metric-row"><span>Seguidores ganados</span><span className="num">{fmtInt(ad.followers)}</span></div>
+                              )}
                             </div>
                           </div>
                         );

@@ -1,5 +1,6 @@
 import type { AdRow } from "./types";
 import { fetchWindsorRows, reasonMessage } from "./windsorFetch";
+import { NON_CRITICAL } from "./cache";
 import { resolveDateRange, discoveryWindowFor, type DateRangeKey } from "./windsor";
 
 /**
@@ -49,6 +50,13 @@ const JOIN_FIELDS = "account_id,account_name,campaign_id,campaign,ad_id,ad_name,
 const DISCOVERY_FIELDS = "account_id,account_name,campaign_id,campaign,ad_id,ad_name";
 const CORE_FIELDS = `${JOIN_FIELDS},spend,conversions,impressions,clicks,thumbnail_url`;
 
+// Seguidores ganados atribuidos a cada anuncio — capa aparte y no crítica: los
+// nombres salen del catálogo público de Windsor (connectors.windsor.ai/<connector>/fields,
+// 2026-10-01) pero NO se verificó todavía contra una respuesta real de la
+// cuenta de Taquión si conviven con otras métricas en la misma consulta. Si
+// Windsor la rechaza, los anuncios se muestran igual, sin esa métrica.
+const FOLLOWERS_FIELDS = "account_id,campaign_id,ad_id,instagram_profile_follow,actions_like";
+
 interface Accum {
   accountId: string;
   accountName: string;
@@ -61,6 +69,8 @@ interface Accum {
   spend: number;
   conversions: number;
   thumbnailUrl?: string;
+  followers: number;
+  hasFollowers: boolean;
   hasCore: boolean;
 }
 
@@ -85,6 +95,8 @@ function getOrCreate(byAd: Map<string, Accum>, row: any): Accum | null {
       spend: 0,
       conversions: 0,
       thumbnailUrl: undefined,
+      followers: 0,
+      hasFollowers: false,
       hasCore: false,
     };
     byAd.set(key, acc);
@@ -108,9 +120,10 @@ export async function fetchMetaAds(rangeKey: DateRangeKey = "month"): Promise<{ 
   // Núcleo y descubrimiento son independientes: en paralelo, el tiempo total
   // es el de la más lenta y no la suma.
   const discovery = discoveryWindowFor(range);
-  const [coreRes, discoveryRes] = await Promise.allSettled([
+  const [coreRes, discoveryRes, followersRes] = await Promise.allSettled([
     fetchLayer(CORE_FIELDS, range.dateFrom, range.dateTo),
     fetchLayer(DISCOVERY_FIELDS, discovery.dateFrom, discovery.dateTo),
+    fetchLayer(FOLLOWERS_FIELDS, range.dateFrom, range.dateTo),
   ]);
 
   if (coreRes.status === "rejected") {
@@ -141,6 +154,20 @@ export async function fetchMetaAds(rangeKey: DateRangeKey = "month"): Promise<{ 
     }
   }
 
+  // Seguidores por anuncio — no crítico (ver FOLLOWERS_FIELDS).
+  if (followersRes.status === "rejected") {
+    warnings.push(
+      `Windsor.ai (Meta Ads, anuncios) ${NON_CRITICAL}: los seguidores por anuncio no están disponibles, esa métrica queda sin datos. Detalle: ${reasonMessage(followersRes)}`
+    );
+  } else {
+    for (const row of followersRes.value) {
+      const acc = getOrCreate(byAd, row);
+      if (!acc) continue;
+      acc.hasFollowers = true;
+      acc.followers += Number(row.instagram_profile_follow ?? 0) + Number(row.actions_like ?? 0);
+    }
+  }
+
   if (byAd.size === 0) {
     warnings.push(`Windsor.ai (Meta Ads, anuncios): no se encontró ningún anuncio conectado, ni con actividad ni sin ella, en la ventana de descubrimiento del período elegido.`);
     return { ads: [], warnings };
@@ -163,6 +190,7 @@ export async function fetchMetaAds(rangeKey: DateRangeKey = "month"): Promise<{ 
       cpl: acc.conversions > 0 ? acc.spend / acc.conversions : 0,
       conversions: acc.conversions,
       thumbnailUrl: acc.thumbnailUrl,
+      followers: acc.hasFollowers ? acc.followers : undefined,
     }));
 
   return { ads, warnings };
