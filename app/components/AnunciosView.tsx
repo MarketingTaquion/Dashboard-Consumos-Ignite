@@ -280,6 +280,7 @@ export default function AnunciosView() {
         <a href="/medios">Campañas</a>
         <a href="/medios/anuncios" aria-current="page">Anuncios</a>
         <a href="/medios/comparacion">Comparación de plataformas</a>
+        <a href="/medios/alertas">Alertas</a>
       </nav>
 
       {data.warnings?.map((w, i) => (

@@ -269,6 +269,7 @@ export default function MediosView() {
         <a href="/medios" aria-current="page">Campañas</a>
         <a href="/medios/anuncios">Anuncios</a>
         <a href="/medios/comparacion">Comparación de plataformas</a>
+        <a href="/medios/alertas">Alertas</a>
       </nav>
 
       {mergedWarnings.map((w, i) => (

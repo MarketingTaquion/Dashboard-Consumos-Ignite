@@ -54,7 +54,7 @@ Todavía no existen estas variables — se van a necesitar cuando se cree el pro
 
 ## Resumen diario al equipo (Google Chat y/o email)
 
-Lo envía [`app/api/cron/notify`](../../app/api/cron/notify/route.ts), disparado por el cron de [`vercel.json`](../../vercel.json) (una vez por día, `0 12 * * *` UTC = 9:00 hs Argentina; en el plan Hobby Vercel lo ejecuta en algún momento dentro de esa hora). El contenido y los umbrales están en [`lib/notifications.ts`](../../lib/notifications.ts) (`THRESHOLDS`).
+Lo envía [`app/api/cron/notify`](../../app/api/cron/notify/route.ts), disparado por el cron de [`vercel.json`](../../vercel.json) (**martes y jueves a las 8:00 hs de Argentina**: `0 11 * * 2,4` en UTC, porque Argentina es UTC−3 todo el año; en el plan Hobby Vercel lo ejecuta en algún momento dentro de esa hora, es decir entre las 8:00 y las 8:59). El contenido y los umbrales están en [`lib/notifications.ts`](../../lib/notifications.ts) (`THRESHOLDS`).
 
 | Variable | Obligatoria | Descripción |
 |---|---|---|
@@ -74,3 +74,11 @@ El resumen se envía a **todos los canales configurados**: Google Chat, email, o
 | `GOOGLE_CHAT_WEBHOOK_URL` | Sí, para usar Google Chat | URL del webhook entrante del Espacio. Tiene que ser un **Espacio con nombre** (los chats grupales sin nombre no admiten webhooks) y el administrador de Google Workspace tiene que permitir webhooks. Debe empezar con `https://chat.googleapis.com/v1/spaces/`; cualquier otro destino se rechaza. **Es una credencial** (lleva `key` y `token`): con ella cualquiera puede escribir en el espacio. Cargarla solo en Vercel, como *Sensitive*; si se expone, borrar el webhook en el Espacio y crear uno nuevo. |
 
 Sin ningún canal configurado, `/api/cron/notify` responde 503 indicando qué cargar. Con `?dryRun=1` devuelve el resumen en los formatos de Chat y de email sin enviar nada.
+
+## Registro de alertas (Upstash Redis)
+
+Guarda las alertas enviadas por el cron para la pantalla **Medios → Alertas**. Se crea desde Vercel → Storage → Upstash Redis y se conecta al proyecto: Vercel agrega las variables solo. Paso a paso: [activar el registro de alertas](../how-to/activar-registro-de-alertas.md).
+
+| Variable | Obligatoria | Descripción |
+|---|---|---|
+| `KV_REST_API_URL` y `KV_REST_API_TOKEN` | No — opcional | URL y token REST de la base. También se aceptan los nombres `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`. **El token es una credencial**: no va en el repo ni en un chat. Sin estas variables el resumen se envía igual, pero no se registra nada y la pantalla Alertas explica cómo activarlo. |

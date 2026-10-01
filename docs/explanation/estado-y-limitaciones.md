@@ -40,3 +40,7 @@ Antes, cualquier falla de Windsor (timeout, HTTP 5xx) hacía que las rutas `/api
 - **Caché en memoria por ruta** (`lib/cache.ts`): 5 min de frescura. Solo se guardan resultados completos. Si una consulta nueva falla o viene parcial y hay un resultado completo de hasta 6 h, se sirve ese con un aviso "Mostrando datos de hace N min". Consultas simultáneas idénticas comparten una sola llamada a Windsor. Es **por instancia de Vercel** (se pierde en un cold start) — no reemplaza el histórico persistente en Supabase del backlog.
 - **Capas en paralelo** y cliente único a Windsor (`lib/windsorFetch.ts`): timeout de 20 s por consulta, un reintento ante 429/5xx/red (no ante timeout), máximo 8 consultas simultáneas por instancia. Las rutas declaran `maxDuration = 30`.
 - **Límite conocido:** un resultado *parcial* sin historial previo (p. ej. venció la capa de descubrimiento) se muestra igual, con su warning y sin cachear — los anuncios/cuentas sin actividad pueden faltar hasta el siguiente intento.
+
+## La moderación de alertas no tiene login
+
+La pantalla **Medios → Alertas** permite marcar alertas como revisadas o descartarlas. Como el dashboard todavía no tiene login, "quién modera" es el nombre que escribe la persona (queda en el historial de la alerta), no una identidad verificada, y cualquiera con la URL puede moderar. Es el mismo límite que ya tiene `POST /api/finance-budget`; se resuelve junto con la autenticación (Supabase Auth, próximo sprint).
