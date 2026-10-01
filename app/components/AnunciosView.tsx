@@ -33,10 +33,9 @@ function fmtMoney(n: number): string {
 // Orden de rendimiento DENTRO de cada grupo de campaña (no reordena los
 // grupos entre sí) — a pedido explícito 2026-09-25, para ver de un vistazo
 // qué variante creativa escalar o pausar.
-type SortKey = "default" | "cpl" | "ctr" | "impressions";
+type SortKey = "default" | "ctr" | "impressions";
 const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: "default", label: "Orden original" },
-  { key: "cpl", label: "Mejor CPL" },
   { key: "ctr", label: "Mejor CTR" },
   { key: "impressions", label: "Más impresiones" },
 ];
@@ -44,11 +43,7 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
 function sortAdsBy(ads: AdRow[], sortKey: SortKey): AdRow[] {
   if (sortKey === "default") return ads;
   const arr = [...ads];
-  if (sortKey === "cpl") {
-    // Sin conversiones, cpl viene en 0 — no es "el mejor CPL", es "no hay
-    // dato". Se los manda al final en vez de mezclarlos arriba.
-    arr.sort((a, b) => (a.conversions > 0 ? a.cpl : Infinity) - (b.conversions > 0 ? b.cpl : Infinity));
-  } else if (sortKey === "ctr") {
+  if (sortKey === "ctr") {
     arr.sort((a, b) => b.ctr - a.ctr);
   } else if (sortKey === "impressions") {
     arr.sort((a, b) => b.impressions - a.impressions);
@@ -60,17 +55,12 @@ function sortAdsBy(ads: AdRow[], sortKey: SortKey): AdRow[] {
 // la grilla (SortKey acá puede ser "default", que no ordena nada): si no
 // hay un criterio explícito se usa CTR, el más representativo de "qué
 // variante conviene escalar" a simple vista. Ningún badge con 1 solo
-// anuncio en el grupo (no hay con qué comparar) ni si el "mejor" por CPL en
-// realidad no tiene conversiones (sería "sin dato", no "el mejor").
+// anuncio en el grupo (no hay con qué comparar).
+// CPL y Conversiones se ocultaron a pedido del equipo (2026-10-01): el dato
+// sigue en la API, así que volver a ofrecerlos es agregar la fila y el criterio.
 function bestAdInGroup(ads: AdRow[], sortKey: SortKey): { adId: string; label: string } | null {
   if (ads.length < 2) return null;
   const criterion = sortKey === "default" ? "ctr" : sortKey;
-  if (criterion === "cpl") {
-    const withConversions = ads.filter((a) => a.conversions > 0);
-    if (withConversions.length === 0) return null;
-    const top = [...withConversions].sort((a, b) => a.cpl - b.cpl)[0];
-    return { adId: top.adId, label: "Mejor CPL" };
-  }
   if (criterion === "impressions") {
     const top = [...ads].sort((a, b) => b.impressions - a.impressions)[0];
     return { adId: top.adId, label: "Más impresiones" };
@@ -485,8 +475,6 @@ export default function AnunciosView() {
                               <div className="ad-metric-row"><span>Gasto</span><span className="num">{fmtMoney(ad.spend)}</span></div>
                               <div className="ad-metric-row"><span>CPM</span><span className="num">{fmtMoney(ad.cpm)}</span></div>
                               <div className="ad-metric-row"><span>CTR</span><span className="num">{ad.ctr.toFixed(1)}%</span></div>
-                              <div className="ad-metric-row"><span>CPL</span><span className="num">{fmtMoney(ad.cpl)}</span></div>
-                              <div className="ad-metric-row"><span>Conversiones</span><span className="num">{fmtInt(ad.conversions)}</span></div>
                               {ad.followers !== undefined && (
                                 <div className="ad-metric-row"><span>Seguidores ganados</span><span className="num">{fmtInt(ad.followers)}</span></div>
                               )}
