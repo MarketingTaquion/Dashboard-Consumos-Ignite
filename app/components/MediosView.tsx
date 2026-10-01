@@ -99,6 +99,14 @@ function dailyRecommended(budget: number, spend: number, today: number, daysInPe
 // pasaron menos de MIN_DAYS_FOR_PCT días del período: con 1 o 2 días de gasto
 // el promedio es ruido y el % sale desproporcionado (ej. +9701% el día 1).
 const MIN_DAYS_FOR_PCT = 3;
+// ¿Hay que subir el gasto diario? Recomendado > ritmo promedio actual (0 si
+// todavía no se gastó nada). A diferencia del %, no se oculta antes del día
+// 3: la dirección es válida desde el primer día, solo la magnitud es ruido.
+// Se usa para pintar el monto de verde ("hay que aumentar presupuesto").
+function needsIncrease(daily: number, spend: number, today: number): boolean {
+  const current = today > 0 ? spend / today : 0;
+  return daily > current;
+}
 function dailyVsCurrentPct(daily: number, spend: number, today: number): number | undefined {
   if (daily <= 0 || spend <= 0 || today < MIN_DAYS_FOR_PCT) return undefined;
   return (daily / (spend / today) - 1) * 100;
@@ -448,6 +456,7 @@ export default function MediosView() {
                   campaignsIncluded.map((c) => {
                     const daily = dailyRecommended(c.budget, c.spend, today, daysInPeriod);
                     const pctVsNow = daily === undefined ? undefined : dailyVsCurrentPct(daily, c.spend, today);
+                    const increase = daily !== undefined && daily > 0 && needsIncrease(daily, c.spend, today);
                     const remaining = c.budget - c.spend;
                     const cst = statusForBudgetSpend(c.budget, c.spend, today, daysInPeriod);
                     const platMeta = PLATFORMS.find((p) => p.key === c.platform);
@@ -480,7 +489,7 @@ export default function MediosView() {
                           <span style={{ color: "var(--delta-bad-text)" }}>Presupuesto agotado</span>
                         ) : (
                           <>
-                            {fmtMoney(daily)} x día
+                            <span style={increase ? { color: "var(--delta-good-text)" } : undefined}>{fmtMoney(daily)} x día</span>
                             {pctVsNow !== undefined && (
                               <span style={{ color: "var(--text-muted)" }}>
                                 {" "}
