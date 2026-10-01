@@ -16,6 +16,9 @@ const PLATFORMS: { key: PlatformKey; label: string; varName: string }[] = [
 // acumulado a la fecha (ese viene siempre del dato real/mock), solo la forma.
 const WEEK_PATTERN = [1.15, 1.05, 0.95, 1.1, 1.2, 0.55, 0.45];
 
+// Solo para los ticks del eje Y del gráfico (poco espacio). Los montos de
+// presupuesto y gasto se muestran siempre completos, sin abreviar (fmtFull) —
+// pedido del equipo 2026-10-01, para Finanzas y Medios.
 function fmtCompact(n: number): string {
   const sign = n < 0 ? "-" : "";
   n = Math.abs(n);
@@ -571,14 +574,14 @@ export default function Dashboard() {
                 onClick={startEditBudget}
                 title="Cargado a mano por Finanzas — click para editar"
               >
-                {!manualBudgetLoaded ? "…" : manualBudget === null ? "Cargar" : fmtCompact(manualBudget)}
+                {!manualBudgetLoaded ? "…" : manualBudget === null ? "Cargar" : fmtFull(manualBudget)}
               </button>
             )}
             {budgetSaveError && <div className="budget-edit-error">{budgetSaveError}</div>}
           </div>
           <div className="stat-chip">
             <span className="stat-label">Total gastado</span>
-            <span className="stat-value num">{fmtCompact(totalSpendEnabled)}</span>
+            <span className="stat-value num">{fmtFull(totalSpendEnabled)}</span>
           </div>
         </div>
         <div className="controls-right chip-row" role="group" aria-label="Mostrar/ocultar plataforma">
@@ -587,7 +590,7 @@ export default function Dashboard() {
               <span className="dot" style={{ background: `var(${p.varName})` }} />
               {p.label}
               <span className="amount num">
-                {fmtCompact(p.spend)}/{fmtCompact(p.budget)}
+                {fmtFull(p.spend)}/{fmtFull(p.budget)}
               </span>
             </button>
           ))}
