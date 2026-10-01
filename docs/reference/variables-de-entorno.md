@@ -54,7 +54,7 @@ Todavía no existen estas variables — se van a necesitar cuando se cree el pro
 
 ## Resumen diario al equipo (Google Chat y/o email)
 
-Lo envía [`app/api/cron/notify`](../../app/api/cron/notify/route.ts), disparado por el cron de [`vercel.json`](../../vercel.json) (**lunes y viernes a las 8:00 hs de Argentina**: `0 11 * * 1,5` en UTC, porque Argentina es UTC−3 todo el año; en el plan Hobby Vercel lo ejecuta en algún momento dentro de esa hora, es decir entre las 8:00 y las 8:59). El contenido y los umbrales están en [`lib/notifications.ts`](../../lib/notifications.ts) (`THRESHOLDS`).
+Lo envía [`app/api/cron/notify`](../../app/api/cron/notify/route.ts), disparado por el cron de [`vercel.json`](../../vercel.json) (**martes y jueves a las 8:00 hs de Argentina**: `0 11 * * 2,4` en UTC, porque Argentina es UTC−3 todo el año; en el plan Hobby Vercel lo ejecuta en algún momento dentro de esa hora, es decir entre las 8:00 y las 8:59). El contenido y los umbrales están en [`lib/notifications.ts`](../../lib/notifications.ts) (`THRESHOLDS`).
 
 | Variable | Obligatoria | Descripción |
 |---|---|---|

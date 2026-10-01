@@ -15,8 +15,8 @@ export const maxDuration = 60;
 
 /**
  * Resumen diario al equipo (gasto vs presupuesto + performance de anuncios).
- * Lo dispara el cron de vercel.json: lunes y viernes a las 8:00 hs de Argentina
- * (11:00 UTC, `0 11 * * 1,5`). Se envía a TODOS los
+ * Lo dispara el cron de vercel.json: martes y jueves a las 8:00 hs de Argentina
+ * (11:00 UTC, `0 11 * * 2,4`). Se envía a TODOS los
  * canales que estén configurados:
  *
  * - Google Chat: GOOGLE_CHAT_WEBHOOK_URL (ver lib/chat.ts)
