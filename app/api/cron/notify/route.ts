@@ -15,7 +15,8 @@ export const maxDuration = 60;
 
 /**
  * Resumen diario al equipo (gasto vs presupuesto + performance de anuncios).
- * Lo dispara el cron de vercel.json, una vez por día. Se envía a TODOS los
+ * Lo dispara el cron de vercel.json: lunes y viernes a las 8:00 hs de Argentina
+ * (11:00 UTC, `0 11 * * 1,5`). Se envía a TODOS los
  * canales que estén configurados:
  *
  * - Google Chat: GOOGLE_CHAT_WEBHOOK_URL (ver lib/chat.ts)
@@ -111,7 +112,7 @@ export async function GET(request: Request) {
     ads,
     adsWindowLabel: "últimos 7 días",
     unavailable,
-    dateLabel: new Date().toLocaleDateString("es-AR", { day: "numeric", month: "long", timeZone: "America/Argentina/Buenos_Aires" }),
+    dateLabel: new Date().toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long", timeZone: "America/Argentina/Buenos_Aires" }),
   });
 
   if (dryRun) {

@@ -174,7 +174,7 @@ export function buildDigest(input: DigestInput): Digest {
   // ---------------- HTML
   const h: string[] = [];
   h.push(`<div style="font-family:Arial,Helvetica,sans-serif;color:#101828;max-width:760px">`);
-  h.push(`<h2 style="margin:0 0 4px">Pulso Ignite — resumen diario</h2>`);
+  h.push(`<h2 style="margin:0 0 4px">Pulso Ignite — resumen</h2>`);
   h.push(`<p style="margin:0 0 16px;color:#475467;font-size:13px">${esc(dateLabel)} · día ${today} de ${daysInPeriod} del mes</p>`);
 
   if (unavailable.length) {
@@ -234,7 +234,7 @@ export function buildDigest(input: DigestInput): Digest {
 
   // ---------------- texto plano
   const t: string[] = [];
-  t.push(`Pulso Ignite — resumen diario (${dateLabel}, día ${today} de ${daysInPeriod})`, "");
+  t.push(`Pulso Ignite — resumen (${dateLabel}, día ${today} de ${daysInPeriod})`, "");
   if (unavailable.length) t.push("DATOS NO DISPONIBLES:", ...unavailable.map((u) => `- ${u}`), "");
   t.push("SEGUIMIENTO DEL GASTO (mes en curso)");
   if (!pacing) t.push("Sección no disponible en este envío.");
@@ -260,7 +260,7 @@ export function buildDigest(input: DigestInput): Digest {
   const code = (v: string) => "`" + v.replace(/`/g, "'") + "`";
   const ICON: Record<PacingStatus, string> = { exceeded: "🔴", over: "🟠", under: "🟠", ok: "🟢", early: "⚪" };
   const c: string[] = [];
-  c.push("*Pulso Ignite — resumen diario*", `${dateLabel} · día ${today} de ${daysInPeriod} del mes`, "");
+  c.push("*Pulso Ignite — resumen*", `${dateLabel} · día ${today} de ${daysInPeriod} del mes`, "");
   if (unavailable.length) c.push("⚠️ *Datos que no se pudieron obtener:*", ...unavailable.map((u) => `• ${u}`), "");
   c.push("*Seguimiento del gasto (mes en curso)*");
   if (!pacing) c.push("Sección no disponible en este envío.");
