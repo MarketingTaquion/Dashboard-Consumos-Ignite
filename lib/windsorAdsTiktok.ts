@@ -94,8 +94,8 @@ function getOrCreate(byAd: Map<string, Accum>, row: any): Accum | null {
 
 // Timeout, reintento y límite de concurrencia: ver lib/windsorFetch.ts. La
 // consulta de anuncios de TikTok tarda ~9s en producción (2026-09-30).
-function fetchLayer(fields: string, dateFrom: string, dateTo: string): Promise<any[]> {
-  return fetchWindsorRows(CONNECTOR, fields, dateFrom, dateTo);
+function fetchLayer(fields: string, dateFrom: string, dateTo: string, timeoutMs?: number): Promise<any[]> {
+  return fetchWindsorRows(CONNECTOR, fields, dateFrom, dateTo, timeoutMs);
 }
 
 export async function fetchTiktokAds(rangeKey: DateRangeKey = "month", opts: FetchAdsOptions = {}): Promise<{ ads: AdRow[]; warnings: string[]; failed?: boolean }> {
@@ -109,9 +109,9 @@ export async function fetchTiktokAds(rangeKey: DateRangeKey = "month", opts: Fet
   // es el de la más lenta y no la suma.
   const discovery = discoveryWindowFor(range);
   const [coreRes, discoveryRes, followersRes] = await Promise.allSettled([
-    fetchLayer(CORE_FIELDS, range.dateFrom, range.dateTo),
-    opts.skipDiscovery ? Promise.resolve<any[]>([]) : fetchLayer(DISCOVERY_FIELDS, discovery.dateFrom, discovery.dateTo),
-    opts.skipFollowers ? Promise.resolve<any[]>([]) : fetchLayer(FOLLOWERS_FIELDS, range.dateFrom, range.dateTo),
+    fetchLayer(CORE_FIELDS, range.dateFrom, range.dateTo, opts.timeoutMs),
+    opts.skipDiscovery ? Promise.resolve<any[]>([]) : fetchLayer(DISCOVERY_FIELDS, discovery.dateFrom, discovery.dateTo, opts.timeoutMs),
+    opts.skipFollowers ? Promise.resolve<any[]>([]) : fetchLayer(FOLLOWERS_FIELDS, range.dateFrom, range.dateTo, opts.timeoutMs),
   ]);
 
   if (coreRes.status === "rejected") {

@@ -31,8 +31,8 @@ class WindsorHttpError extends Error {
 }
 
 class WindsorTimeoutError extends Error {
-  constructor() {
-    super(`Timeout de ${WINDSOR_TIMEOUT_MS / 1000}s consultando Windsor.ai`);
+  constructor(ms: number) {
+    super(`Timeout de ${Math.round(ms / 1000)}s consultando Windsor.ai`);
   }
 }
 
@@ -54,9 +54,9 @@ function release(): void {
   else active--;
 }
 
-async function requestOnce(url: string): Promise<any> {
+async function requestOnce(url: string, timeoutMs: number): Promise<any> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), WINDSOR_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(url, { cache: "no-store", signal: controller.signal });
     if (!res.ok) {
@@ -65,7 +65,7 @@ async function requestOnce(url: string): Promise<any> {
     }
     return await res.json();
   } catch (err: any) {
-    if (err?.name === "AbortError") throw new WindsorTimeoutError();
+    if (err?.name === "AbortError") throw new WindsorTimeoutError(timeoutMs);
     throw err;
   } finally {
     clearTimeout(timer);
@@ -78,15 +78,15 @@ function isRetryable(err: unknown): boolean {
   return true; // error de red
 }
 
-async function requestWithRetry(url: string): Promise<any> {
+async function requestWithRetry(url: string, timeoutMs: number): Promise<any> {
   await acquire();
   try {
     try {
-      return await requestOnce(url);
+      return await requestOnce(url, timeoutMs);
     } catch (err) {
       if (!isRetryable(err)) throw err;
       await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
-      return await requestOnce(url);
+      return await requestOnce(url, timeoutMs);
     }
   } finally {
     release();
@@ -94,9 +94,15 @@ async function requestWithRetry(url: string): Promise<any> {
 }
 
 /** Una consulta de un connector de Windsor → array de filas. Tira si falla. */
-export async function fetchWindsorRows(connector: string, fields: string, dateFrom: string, dateTo: string): Promise<any[]> {
+/**
+ * `timeoutMs` (opcional) pisa el timeout por defecto. Hace falta en el resumen del
+ * cron: cada envío pide ventanas de fechas NUEVAS y Windsor tarda más de 20 s en la
+ * primera consulta de una ventana de anuncios de Meta (después la tiene en caché y
+ * responde en ~2 s). Medido en producción 2026-10-02.
+ */
+export async function fetchWindsorRows(connector: string, fields: string, dateFrom: string, dateTo: string, timeoutMs: number = WINDSOR_TIMEOUT_MS): Promise<any[]> {
   const params = new URLSearchParams({ api_key: process.env.WINDSOR_API_KEY!, fields, date_from: dateFrom, date_to: dateTo });
-  const json = await requestWithRetry(`${WINDSOR_BASE_URL}/${connector}?${params.toString()}`);
+  const json = await requestWithRetry(`${WINDSOR_BASE_URL}/${connector}?${params.toString()}`, timeoutMs);
   const rows = Array.isArray(json) ? json : json?.data;
   if (!Array.isArray(rows)) throw new Error("Respuesta inesperada de Windsor.ai (ni array ni { data: [...] })");
   return rows;
@@ -115,6 +121,8 @@ export interface FetchAdsOptions {
   skipFollowers?: boolean;
   /** Rango explícito: pisa al preset `rangeKey`. */
   range?: ResolvedDateRange;
+  /** Timeout por consulta (ms); por defecto WINDSOR_TIMEOUT_MS. */
+  timeoutMs?: number;
 }
 
 /** Mensaje legible de un resultado rechazado de Promise.allSettled. */
