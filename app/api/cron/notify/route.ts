@@ -16,7 +16,10 @@ import type { DeliveryResult, RunRecord } from "@/lib/alertTypes";
 import type { AdRow, PlatformKey } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+// Más holgado que las pantallas: el primer pedido de una ventana de fechas nueva a
+// Windsor puede tardar más de 20 s (ver CRON_LAYER_TIMEOUT_MS). El plan Hobby con
+// Fluid Compute admite hasta 300 s.
+export const maxDuration = 120;
 
 /**
  * Resumen del equipo (alertas de gasto contra presupuesto y de performance de
@@ -63,6 +66,14 @@ const errMsg = (e: unknown) => (e as any)?.message || String(e);
 
 const PLATFORMS: PlatformKey[] = ["google", "meta", "tiktok"];
 
+/**
+ * Timeout por consulta de anuncios y frecuencia del resumen. Cada envío usa ventanas
+ * de fechas distintas a las del anterior, así que Windsor siempre las recibe "en frío":
+ * en producción (2026-10-02) la primera consulta de anuncios de Meta superó los 20 s y
+ * el resumen salió sin esa sección; la segunda, ya en caché de Windsor, tardó 2 s.
+ */
+const CRON_LAYER_TIMEOUT_MS = 70000;
+
 export async function GET(request: Request) {
   const auth = isAuthorized(request);
   if (auth === "unconfigured") {
@@ -105,13 +116,13 @@ export async function GET(request: Request) {
   // (>= 12 meses de historia, la consulta más lenta de Meta/TikTok, que en la primera
   // prueba en producción venció por timeout de 20 s). La semana anterior tampoco
   // necesita la capa de seguidores.
-  const currentOpts: FetchAdsOptions = { skipDiscovery: true, range: current };
-  const previousOpts: FetchAdsOptions = { skipDiscovery: true, skipFollowers: true, range: previous };
+  const currentOpts: FetchAdsOptions = { skipDiscovery: true, range: current, timeoutMs: CRON_LAYER_TIMEOUT_MS };
+  const previousOpts: FetchAdsOptions = { skipDiscovery: true, skipFollowers: true, range: previous, timeoutMs: CRON_LAYER_TIMEOUT_MS };
 
   const [spendRes, sheetRes, freqRes, ...adsRes] = await Promise.allSettled([
     fetchWindsorSpend(MOCK_CLIENTS, monthRange),
     fetchMediaPlanTargets(),
-    fetchMetaFrequency(current),
+    fetchMetaFrequency(current, CRON_LAYER_TIMEOUT_MS),
     fetchGoogleAdsAds("7d", currentOpts),
     fetchMetaAds("7d", currentOpts),
     fetchTiktokAds("7d", currentOpts),

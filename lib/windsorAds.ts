@@ -104,8 +104,8 @@ function getOrCreate(byAd: Map<string, Accum>, row: any): Accum | null {
 }
 
 // Timeout, reintento y límite de concurrencia: ver lib/windsorFetch.ts.
-function fetchLayer(fields: string, dateFrom: string, dateTo: string): Promise<any[]> {
-  return fetchWindsorRows(CONNECTOR, fields, dateFrom, dateTo);
+function fetchLayer(fields: string, dateFrom: string, dateTo: string, timeoutMs?: number): Promise<any[]> {
+  return fetchWindsorRows(CONNECTOR, fields, dateFrom, dateTo, timeoutMs);
 }
 
 export async function fetchGoogleAdsAds(rangeKey: DateRangeKey = "month", opts: FetchAdsOptions = {}): Promise<{ ads: AdRow[]; warnings: string[]; failed?: boolean }> {
@@ -120,9 +120,9 @@ export async function fetchGoogleAdsAds(rangeKey: DateRangeKey = "month", opts: 
   // suma. Antes iban en serie (hasta 3 x timeout).
   const discovery = discoveryWindowFor(range);
   const [coreRes, discoveryRes, videoRes] = await Promise.allSettled([
-    fetchLayer(CORE_FIELDS, range.dateFrom, range.dateTo),
-    opts.skipDiscovery ? Promise.resolve<any[]>([]) : fetchLayer(DISCOVERY_FIELDS, discovery.dateFrom, discovery.dateTo),
-    opts.skipDiscovery ? Promise.resolve<any[]>([]) : fetchLayer(VIDEO_FIELDS, discovery.dateFrom, discovery.dateTo),
+    fetchLayer(CORE_FIELDS, range.dateFrom, range.dateTo, opts.timeoutMs),
+    opts.skipDiscovery ? Promise.resolve<any[]>([]) : fetchLayer(DISCOVERY_FIELDS, discovery.dateFrom, discovery.dateTo, opts.timeoutMs),
+    opts.skipDiscovery ? Promise.resolve<any[]>([]) : fetchLayer(VIDEO_FIELDS, discovery.dateFrom, discovery.dateTo, opts.timeoutMs),
   ]);
 
   // Capa 1 — núcleo. Si esta falla, no hay nada que mostrar: se corta acá.

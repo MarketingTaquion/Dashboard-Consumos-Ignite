@@ -41,3 +41,9 @@ Cada envío del cron se guarda (con el texto exacto de los mensajes) y cada aler
 - **Repetición:** cada alerta tiene una huella (por ejemplo, la misma campaña con frecuencia alta). La pantalla muestra cuántas veces apareció ("2.ª vez de 3, desde 1 oct").
 - **Moderación:** Pendiente → Revisada o Descartada (con motivo obligatorio), reabrible; el historial guarda quién, cuándo y la nota.
 - **API:** `GET /api/alerts` (registro) y `PATCH /api/alerts/<id>` (moderar, cuerpo `{ status, note?, by }`).
+
+## Tiempos: ventanas "en frío" en Windsor
+
+Cada envío pide ventanas de fechas distintas a las del envío anterior (siempre "los últimos 7 días completos" y "los 7 anteriores"), así que Windsor las recibe **en frío**: la primera consulta de anuncios de Meta a nivel anuncio puede tardar más de 20 s, y después responde en ~2 s porque queda en su caché. Medido en producción el 2026-10-02: la primera corrida venció por timeout de 20 s y salió sin anuncios de Meta; la segunda tardó 2 s.
+
+Por eso el cron usa un timeout de **70 s por consulta** (`CRON_LAYER_TIMEOUT_MS` en `app/api/cron/notify/route.ts`) y la ruta declara `maxDuration = 120`. Las pantallas siguen con el límite normal de 20 s. Si aun así una sección no llega, el resumen lo dice en "Datos que no se pudieron obtener" en vez de ocultarlo.

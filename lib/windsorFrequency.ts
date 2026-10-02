@@ -36,9 +36,9 @@ export interface FrequencyRow {
 
 const FIELDS = "account_id,account_name,campaign_id,campaign,impressions,reach";
 
-export async function fetchMetaFrequency(range: ResolvedDateRange): Promise<FrequencyRow[]> {
+export async function fetchMetaFrequency(range: ResolvedDateRange, timeoutMs?: number): Promise<FrequencyRow[]> {
   if (!process.env.WINDSOR_API_KEY) return [];
-  const rows = await fetchWindsorRows("facebook", FIELDS, range.dateFrom, range.dateTo);
+  const rows = await fetchWindsorRows("facebook", FIELDS, range.dateFrom, range.dateTo, timeoutMs);
   const byCampaign = new Map<string, FrequencyRow>();
   for (const r of rows) {
     const accountId = String(r.account_id ?? "");
