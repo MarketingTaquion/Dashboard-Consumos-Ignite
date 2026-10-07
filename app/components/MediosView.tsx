@@ -1,6 +1,7 @@
 "use client";
 
 import { fetchJson } from "@/lib/clientFetch";
+import NovedadesBell from "./NovedadesBell";
 import { useEffect, useRef, useState } from "react";
 import type { CampaignRow, CampaignsResponse, PlatformKey } from "@/lib/types";
 
@@ -260,9 +261,12 @@ export default function MediosView() {
             <div className="sub">Rendimiento por campaña — equipo Medios, Taquión</div>
           </div>
         </div>
-        <a href="/" style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
-          Ver perfil Finanzas →
-        </a>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <a href="/" style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
+            Ver perfil Finanzas →
+          </a>
+          <NovedadesBell />
+        </div>
       </header>
 
       <nav className="medios-subnav">
