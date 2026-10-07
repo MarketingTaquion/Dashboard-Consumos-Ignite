@@ -1,5 +1,6 @@
 "use client";
 
+import NovedadesBell from "./NovedadesBell";
 import { useEffect, useMemo, useState } from "react";
 import { fetchJson } from "@/lib/clientFetch";
 import { ALERT_TYPE_LABEL, STATUS_LABEL, type AlertRecord, type AlertType, type ModerationStatus, type RunRecord } from "@/lib/alertTypes";
@@ -155,7 +156,7 @@ export default function AlertasView() {
 
   return (
     <div className="wrap">
-      <header className="topbar">
+      <header className="top">
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/brand/taquion-isotipo.png" alt="Taquión" className="brand-mark" width={30} height={30} />
@@ -164,9 +165,12 @@ export default function AlertasView() {
             <div className="sub">Alertas enviadas: trazabilidad y moderación — equipo Medios, Taquión</div>
           </div>
         </div>
-        <a href="/" style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
-          Ver perfil Finanzas →
-        </a>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <a href="/" style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
+            Ver perfil Finanzas →
+          </a>
+          <NovedadesBell />
+        </div>
       </header>
 
       <nav className="medios-subnav">

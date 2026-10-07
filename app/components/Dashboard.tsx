@@ -1,6 +1,7 @@
 "use client";
 
 import { fetchJson } from "@/lib/clientFetch";
+import NovedadesBell from "./NovedadesBell";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { ClientData, FinanceCampaignRow, PlatformKey, SpendResponse } from "@/lib/types";
 
@@ -478,6 +479,7 @@ export default function Dashboard() {
             <div className="sub">Consumo de pauta multi-cliente — equipo Ignite, Taquión</div>
           </div>
         </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
         <div style={{ textAlign: "right" }}>
           <div className="num" style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
             Día <b style={{ color: "var(--text-primary)" }}>{today}</b> de {daysInMonth} · ritmo ideal{" "}
@@ -486,6 +488,8 @@ export default function Dashboard() {
           <a href="/medios" style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
             Ver perfil Medios →
           </a>
+        </div>
+          <NovedadesBell />
         </div>
       </header>
 
