@@ -2,6 +2,9 @@
 
 import { fetchJson } from "@/lib/clientFetch";
 import NovedadesBell from "./NovedadesBell";
+import SessionLinks from "./SessionLinks";
+import MediosNav from "./MediosNav";
+import type { Session } from "@/lib/access";
 import { useEffect, useRef, useState } from "react";
 import type { AdRow, AdsResponse, PlatformKey } from "@/lib/types";
 
@@ -95,7 +98,7 @@ function groupByCampaign(ads: AdRow[]): CampaignGroup[] {
   return groups;
 }
 
-export default function AnunciosView() {
+export default function AnunciosView({ session }: { session: Session }) {
   const [platform, setPlatform] = useState<PlatformKey>("google");
   const [datePreset, setDatePreset] = useState<DatePreset>("month");
   const [dateMenuOpen, setDateMenuOpen] = useState(false);
@@ -273,19 +276,12 @@ export default function AnunciosView() {
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <a href="/" style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
-            Ver perfil Finanzas →
-          </a>
+          <SessionLinks session={session} current="medios" />
           <NovedadesBell />
         </div>
       </header>
 
-      <nav className="medios-subnav">
-        <a href="/medios">Campañas</a>
-        <a href="/medios/anuncios" aria-current="page">Anuncios</a>
-        <a href="/medios/comparacion">Comparación de plataformas</a>
-        <a href="/medios/alertas">Alertas</a>
-      </nav>
+      <MediosNav session={session} current="anuncios" />
 
       {data.warnings?.map((w, i) => (
         <div className="mock-note" key={i}>

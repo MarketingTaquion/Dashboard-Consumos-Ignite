@@ -2,6 +2,9 @@
 
 import { fetchJson } from "@/lib/clientFetch";
 import NovedadesBell from "./NovedadesBell";
+import SessionLinks from "./SessionLinks";
+import MediosNav from "./MediosNav";
+import type { Session } from "@/lib/access";
 import { useEffect, useRef, useState } from "react";
 import type { PlatformComparisonResponse, PlatformKey } from "@/lib/types";
 
@@ -30,7 +33,7 @@ function fmtInt(n: number): string {
   return Math.round(n).toLocaleString("es-AR");
 }
 
-export default function ComparacionView() {
+export default function ComparacionView({ session }: { session: Session }) {
   const [datePreset, setDatePreset] = useState<DatePreset>("month");
   const [dateMenuOpen, setDateMenuOpen] = useState(false);
   const [customFrom, setCustomFrom] = useState("");
@@ -100,19 +103,12 @@ export default function ComparacionView() {
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <a href="/" style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
-            Ver perfil Finanzas →
-          </a>
+          <SessionLinks session={session} current="medios" />
           <NovedadesBell />
         </div>
       </header>
 
-      <nav className="medios-subnav">
-        <a href="/medios">Campañas</a>
-        <a href="/medios/anuncios">Anuncios</a>
-        <a href="/medios/comparacion" aria-current="page">Comparación de plataformas</a>
-        <a href="/medios/alertas">Alertas</a>
-      </nav>
+      <MediosNav session={session} current="comparacion" />
 
       {data.warnings?.map((w, i) => (
         <div className="mock-note" key={i}>

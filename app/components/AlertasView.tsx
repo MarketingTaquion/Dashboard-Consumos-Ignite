@@ -1,6 +1,9 @@
 "use client";
 
 import NovedadesBell from "./NovedadesBell";
+import SessionLinks from "./SessionLinks";
+import MediosNav from "./MediosNav";
+import type { Session } from "@/lib/access";
 import { useEffect, useMemo, useState } from "react";
 import { fetchJson } from "@/lib/clientFetch";
 import { ALERT_TYPE_LABEL, STATUS_LABEL, type AlertRecord, type AlertType, type ModerationStatus, type RunRecord } from "@/lib/alertTypes";
@@ -12,8 +15,8 @@ import { ALERT_TYPE_LABEL, STATUS_LABEL, type AlertRecord, type AlertType, type 
  * un motivo. Nada se borra: cada cambio queda en el historial de la alerta.
  *
  * Los datos salen de GET /api/alerts; la moderación va a PATCH /api/alerts/<id>.
- * ⚠️ Sin login todavía: "quién modera" es el nombre que se escribe, no una
- * identidad verificada (ver app/api/alerts/[id]/route.ts).
+ * "Quién modera" es la cuenta del SSO: la pone el servidor, no se escribe acá
+ * (ver app/api/alerts/[id]/route.ts).
  */
 
 interface LogResponse {
@@ -28,22 +31,6 @@ const fmtDateTime = (iso: string) =>
   new Date(iso).toLocaleString("es-AR", { timeZone: TZ, weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const fmtShort = (iso: string) => new Date(iso).toLocaleDateString("es-AR", { timeZone: TZ, day: "numeric", month: "short" });
-
-const NAME_KEY = "pulso.moderador";
-function readSavedName(): string {
-  try {
-    return window.localStorage.getItem(NAME_KEY) ?? "";
-  } catch {
-    return "";
-  }
-}
-function saveName(name: string) {
-  try {
-    window.localStorage.setItem(NAME_KEY, name);
-  } catch {
-    // sin almacenamiento local: se pide el nombre cada vez
-  }
-}
 
 type StatusFilter = "all" | ModerationStatus;
 const STATUS_FILTERS: { key: StatusFilter; label: string }[] = [
@@ -60,7 +47,7 @@ interface Group {
   alerts: AlertRecord[];
 }
 
-export default function AlertasView() {
+export default function AlertasView({ session }: { session: Session }) {
   const [data, setData] = useState<LogResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -69,13 +56,11 @@ export default function AlertasView() {
   const [openMessages, setOpenMessages] = useState<Set<string>>(new Set());
   const [openHistory, setOpenHistory] = useState<Set<string>>(new Set());
   const [moderating, setModerating] = useState<{ id: string; status: ModerationStatus } | null>(null);
-  const [by, setBy] = useState("");
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
-    setBy(readSavedName());
     fetchJson<LogResponse>("/api/alerts")
       .then(setData)
       .catch((err) => setError(String(err?.message || err)));
@@ -142,9 +127,8 @@ export default function AlertasView() {
       const res = await fetchJson<{ ok: boolean; alert: AlertRecord }>(`/api/alerts/${moderating.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: moderating.status, note, by }),
+        body: JSON.stringify({ status: moderating.status, note }),
       });
-      saveName(by.trim());
       setData((prev) => (prev ? { ...prev, alerts: prev.alerts.map((x) => (x.id === res.alert.id ? res.alert : x)) } : prev));
       setModerating(null);
     } catch (err: any) {
@@ -166,19 +150,12 @@ export default function AlertasView() {
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <a href="/" style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
-            Ver perfil Finanzas →
-          </a>
+          <SessionLinks session={session} current="medios" />
           <NovedadesBell />
         </div>
       </header>
 
-      <nav className="medios-subnav">
-        <a href="/medios">Campañas</a>
-        <a href="/medios/anuncios">Anuncios</a>
-        <a href="/medios/comparacion">Comparación de plataformas</a>
-        <a href="/medios/alertas" aria-current="page">Alertas</a>
-      </nav>
+      <MediosNav session={session} current="alertas" />
 
       {error && (
         <div className="loading-state">
@@ -341,10 +318,9 @@ export default function AlertasView() {
                         <div className="alert-form-title">
                           {moderating.status === "reviewed" ? "Marcar como revisada" : moderating.status === "dismissed" ? "Descartar alerta" : "Reabrir alerta"}
                         </div>
-                        <label>
-                          Quién modera
-                          <input value={by} onChange={(e) => setBy(e.target.value)} placeholder="Tu nombre" maxLength={60} />
-                        </label>
+                        <div style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
+                          Queda registrado como <b>{session.email}</b>
+                        </div>
                         <label>
                           Nota {moderating.status === "dismissed" ? "(obligatoria: ¿por qué se descarta?)" : "(opcional)"}
                           <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} maxLength={500} />
