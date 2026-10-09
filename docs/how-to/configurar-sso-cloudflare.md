@@ -55,6 +55,8 @@ El DNS de `taquion.com.ar` está en **Netlify DNS** (Netlify → *Domains* → `
 
 ## 2. Aplicación SaaS en Cloudflare Zero Trust (equipo `quiet-lab-fdf2`)
 
+> ✅ **Ya está creado** (9/10/2026): política **Pulso - Acceso** y aplicación SaaS OIDC **Pulso**, con la configuración de abajo. ID de cliente `2275004eaf1333a979c228724d81c9085769ec78799020c3848f27f39563f440`. Estos pasos quedan como referencia por si hay que rehacerlo.
+
 1. **Política reutilizable** (Zero Trust → *Controles de Access → Políticas → Agregar una política*):
    - Nombre: `Pulso - Acceso`
    - Acción: **Allow**
@@ -64,7 +66,7 @@ El DNS de `taquion.com.ar` está en **Netlify DNS** (Netlify → *Domains* → `
    - Aplicación: `Pulso` (el nombre aparece en la pantalla de login)
    - Protocolo de autenticación: **OIDC**
    - Alcances: `openid`, `email`, `profile`
-   - Direcciones URL de redirección: `https://pulso.taquion.com.ar/auth/callback`
+   - Direcciones URL de redirección: `https://pulso.taquion.com.ar/auth/callback` y `https://dashboard-consumos-ignite.vercel.app/auth/callback` (la segunda permite probar antes de tener el subdominio)
    - **Clave de prueba para intercambio de código (PKCE)**: activada. "Permita PKCE sin secreto de cliente" queda **desactivada**, porque Pulso usa secreto de cliente.
    - Políticas: `Pulso - Acceso`
    - Autenticación: **Google Workspace** y **One-time PIN**, los mismos que el tablero de Frigor
@@ -85,7 +87,7 @@ Se cargan en el hosting (Vercel → *Settings → Environment Variables*, o Netl
 | `OIDC_CLIENT_SECRET` | El Secreto de cliente del paso 2 (secreto) |
 | `SESSION_SECRET` | Clave aleatoria de 32+ caracteres (secreto), ver abajo |
 | `ADMIN_EMAILS` | Administradores fijos, separados por coma (p. ej. quien coordina Pulso) |
-| `PULSO_PUBLIC_URL` | `https://pulso.taquion.com.ar` |
+| `PULSO_PUBLIC_URL` | `https://pulso.taquion.com.ar` (mientras no exista el subdominio: `https://dashboard-consumos-ignite.vercel.app`) |
 | `ALLOWED_EMAIL_DOMAINS` | Opcional; por omisión `taquion.com.ar` |
 | `SESSION_HOURS` | Opcional; de 1 a 24, por omisión 12 |
 
