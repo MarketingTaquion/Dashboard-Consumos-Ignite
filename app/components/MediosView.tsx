@@ -2,6 +2,9 @@
 
 import { fetchJson } from "@/lib/clientFetch";
 import NovedadesBell from "./NovedadesBell";
+import SessionLinks from "./SessionLinks";
+import MediosNav from "./MediosNav";
+import type { Session } from "@/lib/access";
 import { useEffect, useRef, useState } from "react";
 import type { CampaignRow, CampaignsResponse, PlatformKey } from "@/lib/types";
 
@@ -108,7 +111,7 @@ function dailyVsCurrentPct(daily: number, spend: number, today: number): number 
 // columnas específicas cuando corresponde.
 type MergedRow = CampaignRow & { platform: PlatformKey };
 
-export default function MediosView() {
+export default function MediosView({ session }: { session: Session }) {
   // Antes era selección única (un solo booleano `platform`) — a pedido
   // explícito 2026-09-25 pasa a multi-selección, para poder tener varias
   // plataformas prendidas a la vez sin que una apague a la otra. Arranca
@@ -262,19 +265,12 @@ export default function MediosView() {
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <a href="/" style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
-            Ver perfil Finanzas →
-          </a>
+          <SessionLinks session={session} current="medios" />
           <NovedadesBell />
         </div>
       </header>
 
-      <nav className="medios-subnav">
-        <a href="/medios" aria-current="page">Campañas</a>
-        <a href="/medios/anuncios">Anuncios</a>
-        <a href="/medios/comparacion">Comparación de plataformas</a>
-        <a href="/medios/alertas">Alertas</a>
-      </nav>
+      <MediosNav session={session} current="campanas" />
 
       {mergedWarnings.map((w, i) => (
         <div className="mock-note" key={i}>

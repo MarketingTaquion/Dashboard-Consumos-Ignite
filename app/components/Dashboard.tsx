@@ -2,6 +2,8 @@
 
 import { fetchJson } from "@/lib/clientFetch";
 import NovedadesBell from "./NovedadesBell";
+import SessionLinks from "./SessionLinks";
+import type { Session } from "@/lib/access";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { ClientData, FinanceCampaignRow, PlatformKey, SpendResponse } from "@/lib/types";
 
@@ -142,7 +144,7 @@ interface Row {
   campaigns?: FinanceCampaignRow[];
 }
 
-export default function Dashboard() {
+export default function Dashboard({ session }: { session: Session }) {
   const [data, setData] = useState<SpendResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [clientKey, setClientKey] = useState<string>("all");
@@ -485,10 +487,8 @@ export default function Dashboard() {
             Día <b style={{ color: "var(--text-primary)" }}>{today}</b> de {daysInMonth} · ritmo ideal{" "}
             <b style={{ color: "var(--text-primary)" }}>{Math.round(idealPct * 1000) / 10}%</b>
           </div>
-          <a href="/medios" style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
-            Ver perfil Medios →
-          </a>
         </div>
+          <SessionLinks session={session} current="finanzas" />
           <NovedadesBell />
         </div>
       </header>
