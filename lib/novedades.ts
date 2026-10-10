@@ -42,6 +42,16 @@ export const AREA_LABEL: Record<NovedadArea, string> = {
 
 export const NOVEDADES: Novedad[] = [
   {
+    id: "2026-10-09-seguidores-siempre",
+    fecha: "2026-10-09",
+    tipo: "arreglo",
+    area: "medios",
+    titulo: "Anuncios: los seguidores ganados ya no desaparecen",
+    detalle:
+      "En Meta y TikTok cada anuncio muestra siempre la fila de seguidores ganados: el número real (0 si no ganó ninguno) o un guion si en ese momento no se pudo cargar. Antes, si esa consulta fallaba, la métrica desaparecía en silencio varios minutos.",
+    ruta: "/medios/anuncios",
+  },
+  {
     id: "2026-10-07-novedades",
     fecha: "2026-10-07",
     tipo: "nuevo",

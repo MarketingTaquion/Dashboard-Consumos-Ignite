@@ -480,8 +480,13 @@ export default function AnunciosView() {
                               <div className="ad-metric-row"><span>Gasto</span><span className="num">{fmtMoney(ad.spend)}</span></div>
                               <div className="ad-metric-row"><span>CPM</span><span className="num">{fmtMoney(ad.cpm)}</span></div>
                               <div className="ad-metric-row"><span>CTR</span><span className="num">{ad.ctr.toFixed(1)}%</span></div>
-                              {ad.followers !== undefined && (
-                                <div className="ad-metric-row"><span>Seguidores ganados</span><span className="num">{fmtInt(ad.followers)}</span></div>
+                              {(platform === "meta" || platform === "tiktok") && (
+                                <div className="ad-metric-row">
+                                  <span>Seguidores ganados</span>
+                                  <span className="num" title={ad.followers === undefined ? "No se pudo cargar esta métrica. Tocá Reintentar o volvé a abrir la pantalla en unos minutos." : undefined}>
+                                    {ad.followers === undefined ? "—" : fmtInt(ad.followers)}
+                                  </span>
+                                </div>
                               )}
                             </div>
                           </div>
