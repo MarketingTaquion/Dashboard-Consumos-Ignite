@@ -1,6 +1,7 @@
 "use client";
 
-import NovedadesBell from "./NovedadesBell";
+import { MediosHeader, MediosSubnav } from "./PageChrome";
+import { ErrorPanel, LoadingPanel, announceReady } from "./StatusUI";
 import { useEffect, useMemo, useState } from "react";
 import { fetchJson } from "@/lib/clientFetch";
 import { ALERT_TYPE_LABEL, STATUS_LABEL, type AlertRecord, type AlertType, type ModerationStatus, type RunRecord } from "@/lib/alertTypes";
@@ -73,13 +74,27 @@ export default function AlertasView() {
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
+    let cancelled = false;
+    const startedAt = Date.now();
     setBy(readSavedName());
+    setData(null);
+    setError(null);
     fetchJson<LogResponse>("/api/alerts")
-      .then(setData)
-      .catch((err) => setError(String(err?.message || err)));
-  }, []);
+      .then((body) => {
+        if (cancelled) return;
+        setData(body);
+        announceReady("Alertas cargadas", startedAt);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(String(err?.message || err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
 
   const alerts = data?.alerts ?? [];
   const runs = data?.runs ?? [];
@@ -156,39 +171,11 @@ export default function AlertasView() {
 
   return (
     <div className="wrap">
-      <header className="top">
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/taquion-isotipo.png" alt="Taquión" className="brand-mark" width={30} height={30} />
-          <div>
-            <h1>Pulso Ignite — Medios</h1>
-            <div className="sub">Alertas enviadas: trazabilidad y moderación — equipo Medios, Taquión</div>
-          </div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <a href="/" style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
-            Ver perfil Finanzas →
-          </a>
-          <NovedadesBell />
-        </div>
-      </header>
+      <MediosHeader sub="Alertas enviadas: trazabilidad y moderación — equipo Medios, Taquión" />
+      <MediosSubnav current="/medios/alertas" />
 
-      <nav className="medios-subnav">
-        <a href="/medios">Campañas</a>
-        <a href="/medios/anuncios">Anuncios</a>
-        <a href="/medios/comparacion">Comparación de plataformas</a>
-        <a href="/medios/alertas" aria-current="page">Alertas</a>
-      </nav>
-
-      {error && (
-        <div className="loading-state">
-          No se pudo cargar el registro de alertas: {error}{" "}
-          <button type="button" onClick={() => window.location.reload()} style={{ marginLeft: 8, fontWeight: 600, color: "var(--accent)", cursor: "pointer" }}>
-            Reintentar
-          </button>
-        </div>
-      )}
-      {!error && !data && <div className="loading-state">Cargando alertas…</div>}
+      {error && <ErrorPanel what="Alertas" detail={error} onRetry={() => setReloadKey((k) => k + 1)} />}
+      {!error && !data && <LoadingPanel what="el registro de alertas" />}
 
       {data && !data.configured && (
         <div className="alerts-setup">
